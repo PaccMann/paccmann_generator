@@ -1,0 +1,3 @@
+paccmann_predictor @ git+https://git@github.com/PaccMann/paccmann_predictor@0.0.1
+paccmann_omics @ git+https://git@github.com/PaccMann/paccmann_omics@0.0.1
+paccmann_chemistry @ git+https://git@github.com/PaccMann/paccmann_chemistry@0.0.1
