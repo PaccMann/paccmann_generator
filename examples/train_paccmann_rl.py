@@ -133,10 +133,10 @@ def main(*, parser_namespace):
     )
     predictor.eval()
 
-    # Specifies the dumb model used for comparison
-    DUMB = REINFORCE(
+    # Specifies the baseline model used for comparison
+    baseline = REINFORCE(
         generator, cell_encoder, predictor, omics_df, smiles_language, {},
-        'dumb', logger
+        'baseline', logger
     )
 
     # Create a fresh model that will be optimized
@@ -161,7 +161,7 @@ def main(*, parser_namespace):
     )
     cell_encoder_rl.eval()
     model_folder_name = site + '_' + model_name
-    LEARNER = REINFORCE(
+    learner = REINFORCE(
         generator_rl, cell_encoder_rl, predictor, omics_df, smiles_language,
         params, model_folder_name, logger
     )
@@ -180,7 +180,7 @@ def main(*, parser_namespace):
             # Randomly sample a cell line:
             cell_line = np.random.choice(train_omics)
 
-            rew, loss = LEARNER.policy_gradient(
+            rew, loss = learner.policy_gradient(
                 cell_line, epoch, params['batch_size']
             )
             print(
@@ -192,20 +192,20 @@ def main(*, parser_namespace):
             rl_losses.append(loss)
 
         # Save model
-        LEARNER.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
+        learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
 
-        # Compare dumb and trained model on cell line
-        unbiased_smiles, unbiased_preds = DUMB.generate_compounds_and_evaluate(
+        # Compare baseline and trained model on cell line
+        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], cell_line
         )
-        smiles, preds = LEARNER.generate_compounds_and_evaluate(
+        smiles, preds = learner.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], cell_line
         )
         gs = [
             s for i, s in enumerate(smiles)
-            if preds[i] < LEARNER.ic50_threshold
+            if preds[i] < learner.ic50_threshold
         ]
-        gp = preds[preds < LEARNER.ic50_threshold]
+        gp = preds[preds < learner.ic50_threshold]
         for p, s in zip(gp, gs):
             gen_mols.append(s)
             gen_cell.append(cell_line)
@@ -213,27 +213,27 @@ def main(*, parser_namespace):
             tt.append('train')
 
         plot_and_compare(
-            unbiased_preds, preds, site, cell_line, epoch, LEARNER.model_path,
+            unbiased_preds, preds, site, cell_line, epoch, learner.model_path,
             'train', params['eval_batch_size']
         )
 
         # Evaluate on a validation cell line.
         eval_cell_line = np.random.choice(test_omics)
-        unbiased_smiles, unbiased_preds = DUMB.generate_compounds_and_evaluate(
+        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
-        smiles, preds = LEARNER.generate_compounds_and_evaluate(
+        smiles, preds = learner.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         plot_and_compare(
             unbiased_preds, preds, site, eval_cell_line, epoch,
-            LEARNER.model_path, 'test', params['eval_batch_size']
+            learner.model_path, 'test', params['eval_batch_size']
         )
         gs = [
             s for i, s in enumerate(smiles)
-            if preds[i] < LEARNER.ic50_threshold
+            if preds[i] < learner.ic50_threshold
         ]
-        gp = preds[preds < LEARNER.ic50_threshold]
+        gp = preds[preds < learner.ic50_threshold]
         for p, s in zip(gp, gs):
             gen_mols.append(s)
             gen_cell.append(eval_cell_line)
@@ -256,18 +256,18 @@ def main(*, parser_namespace):
                 'mode': tt
             }
         )
-        df.to_csv(os.path.join(LEARNER.model_path, 'results', 'generated.csv'))
+        df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
         # Plot loss development
         loss_df = pd.DataFrame({'loss': rl_losses, 'rewards': rewards})
         loss_df.to_csv(
-            LEARNER.model_path + '/results/loss_reward_evolution.csv'
+            learner.model_path + '/results/loss_reward_evolution.csv'
         )
         plot_loss(
             rl_losses,
             rewards,
             params['epochs'],
             cell_line,
-            LEARNER.model_path,
+            learner.model_path,
             rolling=5,
             site=site
         )
