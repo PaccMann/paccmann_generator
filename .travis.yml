@@ -1,14 +1,12 @@
 dist: trusty
 services:
-- docker
+  - docker
 before_script:
-- docker pull drugilsberg/rdkit-ubuntu:latest
-- docker build -f .travis/Dockerfile -t generator .
+  - docker pull drugilsberg/rdkit-ubuntu:latest
+  - docker build -f .travis/Dockerfile -t generator .
 script:
-- docker run -it generator python3 -c "import paccmann_generator"
-- docker run -it generator python3 examples/train_paccmann_rl.py -h
+  - docker run -it generator python3 -c "import paccmann_generator"
+  - docker run -it generator python3 examples/train_paccmann_rl.py -h
 notifications:
   slack:
-    secure: v57JTtFmub80+wx0n8r1cmxNdcEvZcbBHLCC1Dv4k4O9+zaDkPi543TkvwfL3xEGXKqGgOetfKuP1GnBO8/aXt91NjZH/a21oekXcYcTjwPAQ4mnn44QMcvai+CIDY/dGZ/LjeI/1rbzLSHA8GPjRu6kuLlF5lNZvRtXn91HO840fHarFaMgleR6w6F5QC4Jms6hjUQJ8pKZja0OOrizn+lGGWJdovxKByYmfijUSU/QDosXb1ezxu5sYpz7oBV1ofeGvh6KNYHUVvD6Jw/rcfDIkm1c3Y/GyJRziwZc7yB8CLKcSP0TK4+mN0ucuy9RvkGRs5O4MOIxQa452ZlQ2Qn2htkHFdeM9eHTs6XmHwS81Mf880NtVJk8TQtp+onu/+n4XrKXWljeFUiIpcA7QX2LIV7lxE51K16+JYjzxXEELgA8L73Rh9Juds99LFfsL5Gf+PQ14rB8RsysDx3fq/2ImWIZxHTv/lRwhRx1tV8iTSRa+Q5DYO+LoLzbwvyGJuubLXPlYDWLREO0c9t24Q97zt8A898fwQK/UrEW4nMwQNeZghwoGKXFy6RN8TutnRAgBI4oUR4hGSbHitg18SYlzWUKZ7Hj0f0b0755W79GnAoHplMT25ct97e4AfQPK//I57CXow/3/Sj0yARJLo4lYZqm6BV6HJo9AyzBxss=
-    on_success: always
-    on_failure: always
+    secure: syLtEsvzH5ejn9gvaK7cXQsBeiSWgcPxapI2P/2wu4LXV4dKdrSEqS38bu6EbxxWYZmfJ+oF2EMRQj4v45VOW1xkfBKAgkuwB6BYDJrIKTP7kJSYZ2+pXvbsRQ4NSisaxlV2rjuZoXhN/hSKli1Zud/6st7oP/u71YCo0dD4DkjWG2sh/FM6SajxCbjP1qN3SZehOntB/sCVzymAUnxHqcuVioblTdDZp3SBcIVTsDNWsGF513mvpSyAALwAPr07gg204CIuwoTgNmQJgxxZkH/+byMqpY5mwTiAMsbracX5QQGkpnfMo8Hf3tDFVHixJBeO6kuxovoNlvG17ew3CG8Rd7uD4zWqmuVqSRl8BgUMynUe+X/tgNNE7BMWJCC6/0HQUOT3frmjfgghpLRcOT+NjeLlsHzEfkJAVyN3UvM0k+oqe8xajLVHge/zuMUXMIPPmI0uFvOkMspnZgPy/Kmg4TqQ/3N0ffOJOG90Bh7MtusVY8Wjzccj04Dl6aFUcmDj11k6W8wFgpLZjKGEy59HuviSprWSVTXADfJLitzknCEh4G43UugPJrUiM6OORz0RIntwzXOB2itC9F5dek2BAkBixk43Oy+VyYprt3Zur93ptvPd6OWvUzdxdQcCgYENo4D6yJoTg5iORNvah6Ydlg2Z3Lwv1siCB9awydI=
