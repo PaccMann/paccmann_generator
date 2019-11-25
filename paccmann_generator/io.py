@@ -7,8 +7,10 @@ import os
 import shutil
 import tarfile
 import zipfile
-from urllib import urlretrieve
 from urllib.error import HTTPError, URLError
+from urllib.request import urlretrieve
+
+import six
 
 
 def _extract_archive(filepath, path='.', archive_format='auto'):

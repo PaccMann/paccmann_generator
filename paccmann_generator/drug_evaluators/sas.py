@@ -28,7 +28,6 @@ class SAS(DrugEvaluator):
         super(SAS, self).__init__()
 
         self.fpscores_path = get_file(self.fpscore_file_name, self.fpscore_url)
-
         self._fscores = self.get_fscores()
 
     def __call__(self, mol):
