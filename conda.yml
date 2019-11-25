@@ -12,3 +12,4 @@ dependencies:
     - torch>=1.0.1
     - matplotlib>=2.2.2
     - seaborn>=0.9.0
+    - six>=1.12.0

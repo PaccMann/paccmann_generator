@@ -13,12 +13,8 @@ setup(
         'ali.oskooei@gmail.com, joriscadow@gmail.com'
     ),
     install_requires=[
-        'numpy',
-        'pandas',
-        'matplotlib',
-        'seaborn',
-        'pytoda>=0.0.1',
-        'torch>=1.0.0'
+        'numpy', 'pandas', 'matplotlib', 'seaborn', 'pytoda>=0.0.1',
+        'torch>=1.0.0', 'six>=1.12.0'
     ],
     packages=find_packages('.'),
     zip_safe=False,
