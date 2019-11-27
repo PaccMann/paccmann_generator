@@ -21,7 +21,7 @@ class ESOL(DrugEvaluator):
 
     def __call__(self, mol):
         """
-        Returns the QED of a SMILES string or a RdKit molecule.
+        Returns the ESOL of a SMILES string or a RdKit molecule.
         """
 
         # Error handling.

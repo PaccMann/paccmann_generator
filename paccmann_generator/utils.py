@@ -1,6 +1,9 @@
-import pandas as pd
-import numpy as np
 from math import ceil
+
+import numpy as np
+import pandas as pd
+import rdkit.rdBase as rkrb
+import rdkit.RDLogger as rkl
 
 
 def add_avg_profile(omics_df):
@@ -58,3 +61,12 @@ def omics_data_splitter(omics_df, site, test_fraction):
     train_cell_lines = cell_lines[inds[ceil(len(cell_lines) * test_fraction):]]
 
     return train_cell_lines, test_cell_lines
+
+
+def disable_rdkit_logging():
+    """
+    Disables RDKit whiny logging.
+    """
+    logger = rkl.logger()
+    logger.setLevel(rkl.ERROR)
+    rkrb.DisableLog('rdApp.error')

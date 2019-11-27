@@ -69,13 +69,8 @@ class SCScore(DrugEvaluator):
         fp = np.array((self.smi_to_fp(smiles)), dtype=np.float32)
 
         cur_score = self._compute_scscore(fp) if sum(fp) != 0 else 0.
-        mol = Chem.MolFromSmiles(smiles)
 
-        smi = Chem.MolToSmiles(
-            mol, isomericSmiles=True, kekuleSmiles=True
-        ) if mol else ''
-
-        return (smi, cur_score)
+        return cur_score
 
     def _compute_scscore(self, x):
 
