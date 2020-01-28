@@ -109,20 +109,20 @@ def get_file(
     download = not os.path.exists(filepath)
 
     if download:
-        print('Downloading data from', origin)
 
-    error_msg = 'URL fetch failure on {}: {} -- {}'
-    try:
+        print('Downloading data from', origin)
+        error_msg = 'URL fetch failure on {}: {} -- {}'
         try:
-            urlretrieve(origin, filepath)
-        except HTTPError as e:
-            raise Exception(error_msg.format(origin, e.code, e.msg))
-        except URLError as e:
-            raise Exception(error_msg.format(origin, e.errno, e.reason))
-    except (Exception, KeyboardInterrupt):
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        raise
+            try:
+                urlretrieve(origin, filepath)
+            except HTTPError as e:
+                raise Exception(error_msg.format(origin, e.code, e.msg))
+            except URLError as e:
+                raise Exception(error_msg.format(origin, e.errno, e.reason))
+        except (Exception, KeyboardInterrupt):
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            raise
 
     if extract:
         _extract_archive(filepath, datadir, archive_format)
