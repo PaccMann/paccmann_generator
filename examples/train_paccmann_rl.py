@@ -15,10 +15,12 @@ from paccmann_generator.utils import add_avg_profile, omics_data_splitter
 from paccmann_omics.encoders import ENCODER_FACTORY
 from paccmann_predictor.models import MODEL_FACTORY
 from pytoda.smiles.smiles_language import SMILESLanguage
-
+from paccmann_generator.utils import disable_rdkit_logging
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger('train_paccmann_rl')
+logger_m = logging.getLogger('matplotlib')
+logger_m.setLevel(logging.WARNING)
 
 # yapf: disable
 parser = argparse.ArgumentParser(description='PaccMann^RL training script')
@@ -52,6 +54,8 @@ args = parser.parse_args()
 
 # yapf: enable
 def main(*, parser_namespace):
+
+    disable_rdkit_logging()
 
     # read the params json
     params = dict()
