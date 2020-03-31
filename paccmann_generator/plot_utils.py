@@ -17,10 +17,10 @@ def plot_and_compare(
         100 * (np.sum(unbiased_preds < 0) / len(unbiased_preds)), 1
     )
     print(
-        'NAIVE - {mode}: Percentage of effective compounds = {unbiased_ratio}'
+        f'NAIVE - {mode}: Percentage of effective compounds = {unbiased_ratio}'
     )
     print(
-        'BIASED - {mode}: Percentage of effective compounds = {biased_ratio}'
+        f'BIASED - {mode}: Percentage of effective compounds = {biased_ratio}'
     )
 
     fig, ax = plt.subplots()

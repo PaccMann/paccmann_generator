@@ -10,6 +10,7 @@ from rdkit import Chem
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pytoda.smiles.transforms import SMILESToTokenIndexes
+from .drug_evaluators import QED, SCScore, ESOL, SAS, Lipinski
 
 
 class REINFORCE(object):
@@ -98,11 +99,18 @@ class REINFORCE(object):
 
     def update_params(self, params):
         # parameter for reward function
-        self.alpha = params.get('alpha', 5)
+        self.qed = QED()
+        self.scscore = SCScore()
+        self.esol = ESOL()
+        self.sas = SAS()
+        self.lipinski = Lipinski()
+        self.update_reward_fn(params)
         # discount factor
         self.gamma = params.get('gamma', 0.99)
         # maximal length of generated molecules
-        self.generate_len = params.get('generate_len', 250)
+        self.generate_len = params.get(
+            'generate_len', self.predictor.params['smiles_padding_length'] - 2
+        )
         # smoothing factor for softmax during token sampling in decoder
         self.temperature = params.get('temperature', 0.8)
         # critic: upper and lower bound of log(IC50) for de-normalization
@@ -218,7 +226,13 @@ class REINFORCE(object):
         return smiles_tensor
 
     def generate_compounds_and_evaluate(
-        self, epoch, batch_size, cell_line=None, primed_drug='<START>'
+        self,
+        epoch,
+        batch_size,
+        cell_line=None,
+        primed_drug=' ',
+        return_latent=False,
+        remove_invalid=True
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -252,6 +266,8 @@ class REINFORCE(object):
             )
             cell_mu, cell_logvar = self.encoder(gep_t)
 
+            # TODO: I need to make sure that I only sample around the encoding
+            # of the cell, not the entire latent space.
             latent_z = torch.unsqueeze(
                 self.reparameterize(
                     cell_mu.repeat(batch_size, 1),
@@ -277,7 +293,7 @@ class REINFORCE(object):
 
         # Generate drugs
         valid_smiles, valid_nums = self.get_smiles_from_latent(
-            latent_z, remove_invalid=True
+            latent_z, remove_invalid=remove_invalid
         )
 
         smiles_t = self.smiles_to_numerical(
@@ -291,9 +307,12 @@ class REINFORCE(object):
             smiles_t, gep_t.repeat(len(valid_smiles), 1)
         )
         log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
-        self.plot_hist(log_preds, cell_line, epoch, batch_size)
+        #self.plot_hist(log_preds, cell_line, epoch, batch_size)
 
-        return valid_smiles, log_preds
+        if return_latent:
+            return valid_smiles, log_preds, latent_z
+        else:
+            return valid_smiles, log_preds
 
     def get_smiles_from_latent(self, latent, remove_invalid=True):
         """
@@ -308,47 +327,99 @@ class REINFORCE(object):
         """
         mols_numerical = self.generator.generate(
             latent,
-            prime_input=torch.Tensor([self.smiles_language.start_index]
-                                     ).long(),
+            prime_input=torch.Tensor(
+                [self.smiles_language.start_index]
+            ).long(),
             end_token=torch.Tensor([self.smiles_language.stop_index]).long(),
             generate_len=self.generate_len,
             temperature=self.temperature
-        )
+        )  # yapf: disable
         # Retrieve SMILES from numericals
         smiles_num_tuple = [
             (
                 self.smiles_language.token_indexes_to_smiles(mol_num.tolist()),
-                torch.cat([mol_num, torch.tensor([3, 3])])
+                torch.cat(
+                    [
+                        mol_num.long(),
+                        torch.tensor(2 * [self.smiles_language.stop_index])
+                    ]
+                )
             ) for mol_num in iter(mols_numerical)
         ]
         smiles = [sm[0] for sm in smiles_num_tuple]
         numericals = [sm[1] for sm in smiles_num_tuple]
 
         imgs = [Chem.MolFromSmiles(s, sanitize=True) for s in smiles]
+
         smiles = [
-            smiles[ind] for ind in range(len(imgs)) if imgs[ind] is not None
+            smiles[ind] for ind in range(len(imgs))
+            if not (remove_invalid and imgs[ind] is None)
         ]
         nums = [
             numericals[ind] for ind in range(len(numericals))
-            if imgs[ind] is not None
+            if not (remove_invalid and imgs[ind] is None)
         ]
 
         self.logger.info(
             f'{self.model_name}: SMILES validity: '
-            f'{(len(smiles) / len(imgs)) * 100:.2f}%.'
+            f'{(len([i for i in imgs if i is not None]) / len(imgs)) * 100:.2f}%.'
         )
         return smiles, nums
 
-    def get_reward(self, valid_smiles, cell_line):
+    def update_reward_fn(self, params):
+        """ Set the reward function
+        
+        Arguments:
+            params {dict} -- Hyperparameter for PaccMann reward function
+
+
         """
-        Get the reward.
+        self.paccmann_weight = params.get('paccmann_weight', 1.)
+        self.qed_weight = params.get('qed_weight', 1.)
+        self.scscore_weight = params.get('scscore_weight', 1.)
+        self.esol_weight = params.get('esol_weight', 1.)
+
+        # This is the joint reward function. Each score is normalized to be
+        # inside the range [0, 1].
+        # SCScore is in [1, 5] with 5 being worst
+        # QED is naturally in [0, 1] with 1 being best
+
+        self.reward_fn = (
+            lambda smiles, cell: (
+                self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
+                np.array(
+                    [
+                        self.qed_weight * self.qed(s) + self.scscore_weight *
+                        (self.scscore(s) - 1) * -1 / 4 + self.esol_weight *
+                        (1 if self.esol(s) < -8 and self.esol(s) > -2 else 0)
+                        for s in smiles
+                    ]
+                )
+            )
+        )
+
+    def get_reward(self, valid_smiles, cell_line):
+        """Get the reward
+        
+        Arguments:
+            valid_smiles (list): A list of valid SMILES strings.
+            cell_line (str): String containing the cell line to index.
+        
+        Returns:
+            np.array: computed reward.
+        """
+        return self.reward_fn(valid_smiles, cell_line)
+
+    def get_reward_paccmann(self, valid_smiles, cell_line):
+        """
+        Get the reward from PaccMann
 
         Args:
             valid_smiles (list): A list of valid SMILES strings.
             cell_line (str): String containing the cell line to index.
 
         Returns:
-            np.array: computed reward.
+            np.array: computed reward (fixed to 1/(1+exp(x))).
         """
         # Build up SMILES tensor and GEP tensor
         smiles_tensor = self.smiles_to_numerical(
@@ -375,7 +446,7 @@ class REINFORCE(object):
         log_micromolar_pred = self.get_log_molar(
             np.squeeze(pred.detach().numpy())
         )
-        return np.exp(-log_micromolar_pred / self.alpha)
+        return 1 / (1 + np.exp(log_micromolar_pred))
 
     def policy_gradient(self, cell_line, epoch, batch_size=10):
         """
@@ -399,7 +470,6 @@ class REINFORCE(object):
         valid_smiles, valid_nums = self.get_smiles_from_latent(
             latent_z, remove_invalid=True
         )
-        print(len(valid_smiles))
 
         # Get rewards (list, one reward for each valid smiles)
         rewards = self.get_reward(valid_smiles, cell_line)
