@@ -1,4 +1,4 @@
-pytoda @ git+https://git@github.com/PaccMann/paccmann_datasets@0.0.1
+pytoda @ git+https://git@github.com/PaccMann/paccmann_datasets@latest
 numpy>=1.14.3
 pandas>=0.24.1
 torch>=1.0.1
