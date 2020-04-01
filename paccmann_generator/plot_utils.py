@@ -72,6 +72,70 @@ def plot_and_compare(
     plt.clf()
 
 
+def plot_and_compare_proteins(
+    unbiased_preds, biased_preds, protein, epoch, save_path, mode, bs
+):
+    biased_ratio = np.round(
+        100 * (np.sum(biased_preds < 0) / len(biased_preds)), 1
+    )
+    unbiased_ratio = np.round(
+        100 * (np.sum(unbiased_preds < 0) / len(unbiased_preds)), 1
+    )
+    print(
+        f'NAIVE - {mode}: Percentage of effective compounds = {unbiased_ratio}'
+    )
+    print(
+        f'BIASED - {mode}: Percentage of effective compounds = {biased_ratio}'
+    )
+
+    fig, ax = plt.subplots()
+    sns.kdeplot(
+        unbiased_preds,
+        shade=True,
+        color='grey',
+        label=f'Unbiased: {unbiased_ratio}% '
+    )
+    sns.kdeplot(
+        biased_preds,
+        shade=True,
+        color='red',
+        label=f'Optimized: {biased_ratio}% '
+    )
+    valid = f'SMILES validity: \n {round((len(biased_preds)/bs) * 100, 1)}%'
+    txt = "$\mathbf{Drug \ efficacy}$: "
+    handles, labels = plt.gca().get_legend_handles_labels()
+    patch = mpatches.Patch(color='none', label=txt)
+
+    handles.insert(0, patch)  # add new patches and labels to list
+    labels.insert(0, txt)
+
+    plt.legend(handles, labels, loc='upper right')
+    plt.xlabel('Predicted log(micromolar IC50)')
+    plt.ylabel(f'Density of generated molecules (n={bs})')
+    t1 = 'PaccMann$^{\mathrm{RL}}$ '
+    c = protein.replace('_', ' ')
+    t2 = f'generator for protein: {c}'
+    plt.title(t1 + t2, size=13)
+    plt.text(0.67, 0.70, valid, weight='bold', transform=plt.gca().transAxes)
+    plt.text(
+        0.05,
+        0.8,
+        'Effective compounds',
+        weight='bold',
+        color='grey',
+        transform=plt.gca().transAxes
+    )
+    ax.axvspan(-10, 0, alpha=0.5, color=[0.85, 0.85, 0.85])
+    plt.xlim([-4, 8])
+    plt.savefig(
+        os.path.join(
+            save_path,
+            f'results/{mode}_{protein}_epoch_{epoch}_eff_{biased_ratio}.pdf'
+        )
+    )
+    plt.clf()
+
+
 def plot_loss(
     loss, reward, epoch, cell_line, save_path, rolling=1, site='unknown'
 ):
