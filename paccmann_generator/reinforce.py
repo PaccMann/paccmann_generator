@@ -147,9 +147,7 @@ class REINFORCE(object):
         Encodes cell line in latent space with GEP encoder.
         """
         if cell_line is None:
-            latent_z = torch.randn(
-                1, batch_size, self.cell_encoder.latent_size
-            )
+            latent_z = torch.randn(1, batch_size, self.encoder.latent_size)
         else:
             gep_t = torch.unsqueeze(
                 torch.Tensor(
