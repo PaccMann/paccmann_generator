@@ -190,36 +190,21 @@ class REINFORCE_proteins(object):
         # Convert strings to numbers and padd length.
 
         # TODO: Uncomment once working
-        # smiles_num = [
-        #     self.smiles_to_tensor(
-        #         self.pad_smiles(
-        #             self.smiles_language.smiles_to_token_indexes(smiles)
-        #         )
-        #     ) for smiles in smiles_list
-        # ]
-        smiles_num = []
-        for smiles in smiles_list:
-            # s = self.smiles_to_num(smiles)
-            s = self.smiles_to_tensor(
-                self.pad_smiles(
-                    self.smiles_language.smiles_to_token_indexes(smiles)
-                )
-            )
-
-            # if pad_len is not None and len(s) < pad_len + 1:
-            #     s = (
-            #         s + [self.smiles_language.padding_index] *
-            #         ((pad_len + 1) - len(s))
-            #     )
-            # s = torch.unsqueeze(torch.Tensor(s), 1)
-            smiles_num.append(s)
+        smiles_num = [
+            torch.unsqueeze(
+                self.smiles_to_tensor(
+                    self.pad_smiles(
+                        self.smiles_language.smiles_to_token_indexes(smiles)
+                    )
+                ), 0
+            ) for smiles in smiles_list
+        ]
 
         # Catch scenario where all SMILES are invalid
         if len(smiles_num) == 0:
             return torch.Tensor()
-        print(smiles_num.shape)
-        smiles_tensor = torch.transpose(torch.cat(smiles_num, dim=1), 1, 0)
-        print(smiles_tensor.shape)
+
+        smiles_tensor = torch.cat(smiles_num, dim=0)
         return smiles_tensor
 
     def protein_to_numerical(self, protein):
@@ -244,7 +229,7 @@ class REINFORCE_proteins(object):
 
         # protein_tensor = torch.unsqueeze(torch.Tensor(protein_tokens), 1)
 
-        return protein_tensor
+        return torch.unsqueeze(protein_tensor, 0)
 
     def generate_compounds_and_evaluate(
         self,
@@ -434,7 +419,7 @@ class REINFORCE_proteins(object):
         protein_tensor = self.protein_to_numerical(protein)
 
         pred, pred_dict = self.predictor(
-            smiles_tensor, protein_tensor.repeat(smiles_tensor.shape[0])
+            smiles_tensor, protein_tensor.repeat(smiles_tensor.shape[0], 1)
         )
 
         return np.squeeze(pred.detach().numpy())
