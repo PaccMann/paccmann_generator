@@ -34,7 +34,22 @@ parser.add_argument(
     'ic50_model_path', type=str, help='Path to pretrained ic50 model'
 )
 parser.add_argument(
-    'smiles_language_path', type=str, help='Path to SMILES language object'
+    'tox21_model_path', type=str, help='Path to pretrained Tox21 model'
+)
+parser.add_argument(
+    'organdb_model_path', type=str, help='Path to pretrained OrganDB model'
+)
+parser.add_argument(
+    'organ_name', type=str, help="OrganDB can predict organ specific toxicity. Organ names to choose from (choose only ONE): 'Adrenal Gland', 'Bone Marrow', 'Brain', 'Eye', 'Heart', 'Kidney', 'Liver', 'Lung', 'Lymph Node', 'Mammary Gland', 'Pancreas', 'Pituitary Gland', 'Spleen', 'Stomach', 'Testes', 'Thymus', 'Thyroid Gland', 'Urinary Bladder', 'Uterus', 'Ovary'"
+)
+parser.add_argument(
+    'smiles_language_path_paccmannRL', type=str, help='Path to SMILES language object for PaccmannRL'
+)
+parser.add_argument(
+    'smiles_language_path_tox21', type=str, help='Path to SMILES language object for Tox21'
+)
+parser.add_argument(
+    'smiles_language_path_organdb', type=str, help='Path to SMILES language object for OrganDB'
 )
 parser.add_argument(
     'omics_data_path', type=str, help='Omics data path to condition generation'
@@ -72,8 +87,14 @@ def main(*, parser_namespace):
     ic50_model_path = params.get(
         'ic50_model_path', parser_namespace.ic50_model_path
     )
-    smiles_language_path = params.get(
-        'smiles_language_path', parser_namespace.smiles_language_path
+    smiles_language_path_paccmannRL = params.get(
+        'smiles_language_path_paccmannRL', parser_namespace.smiles_language_path_paccmannRL
+    )
+    smiles_language_path_tox21 = params.get(
+        'smiles_language_path_tox21', parser_namespace.smiles_language_path_tox21
+    )
+    smiles_language_path_organdb = params.get(
+        'smiles_language_path_organdb', parser_namespace.smiles_language_path_organdb
     )
     omics_data_path = params.get(
         'omics_data_path', parser_namespace.omics_data_path
@@ -88,7 +109,10 @@ def main(*, parser_namespace):
     logger.info(f'Model with name {model_name} starts.')
 
     # Load SMILES language
-    smiles_language = SMILESLanguage.load(smiles_language_path)
+    smiles_language_paccmannRL = SMILESLanguage.load(smiles_language_path_paccmannRL)
+    smiles_language_tox21 = SMILESLanguage.load(smiles_language_path_tox21)
+    smiles_language_path_organdb = SMILESLanguage.load(smiles_language_path_organdb)
+
 
     # Load omics profiles for conditional generation,
     # complement with avg per site
@@ -127,19 +151,44 @@ def main(*, parser_namespace):
     # Restore PaccMann
     with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
         paccmann_params = json.load(f)
-    predictor = MODEL_FACTORY['mca'](paccmann_params)
-    predictor.load(
+    paccmann_predictor = MODEL_FACTORY['mca'](paccmann_params)
+    paccmann_predictor.load(
         os.path.join(
             ic50_model_path,
             f"weights/best_{params.get('ic50_metric', 'rmse')}_mca.pt"
         ),
         map_location=get_device()
     )
-    predictor.eval()
+    paccmann_predictor.eval()
+    
+        # Restore Tox21 model
+    with open(os.path.join(tox21_model_path, 'model_params.json')) as f:
+        tox21_params = json.load(f)
+    tox21_predictor = MODEL_FACTORY['mca'](tox21_params)
+    state_dict = torch.load(os.path.join(tox21_model_path, f'best_ROC-AUC_mca.pt'), map_location=get_device())
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        k = k.replace('batch_norm_layer', 'batch_norm')
+        new_state_dict[k]=v
+    tox21_predictor.load_state_dict(new_state_dict)
+    tox21_predictor.eval()
+        
+    # Restore OrganDB model
+    with open(os.path.join(organdb_model_path, 'model_params.json')) as f:
+        organdb_params = json.load(f)
+    organdb_predictor = MODEL_FACTORY['mca'](organdb_params)
+    state_dict = torch.load(os.path.join(tox21_model_path, f'best_ROC-AUC_mca.pt'),
+        map_location=get_device())
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        k = k.replace('batch_norm_layer', 'batch_norm')
+        new_state_dict[k]=v
+    organdb_predictor.load_state_dict(new_state_dict)
+    organdb_predictor.eval()
 
     # Specifies the baseline model used for comparison
     baseline = REINFORCE(
-        generator, cell_encoder, predictor, omics_df, smiles_language, {},
+        generator, cell_encoder, predictor, omics_df, smiles_language_paccmannRL, {},
         'baseline', logger
     )
 
@@ -166,7 +215,7 @@ def main(*, parser_namespace):
     cell_encoder_rl.eval()
     model_folder_name = site + '_' + model_name
     learner = REINFORCE(
-        generator_rl, cell_encoder_rl, predictor, omics_df, smiles_language,
+        generator_rl, cell_encoder_rl, predictor, omics_df, smiles_language_paccmannRL,
         params, model_folder_name, logger
     )
 
