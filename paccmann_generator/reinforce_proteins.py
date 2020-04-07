@@ -189,7 +189,6 @@ class REINFORCE_proteins(object):
 
         # Convert strings to numbers and padd length.
 
-        # TODO: Uncomment once working
         smiles_num = [
             torch.unsqueeze(
                 self.smiles_to_tensor(
@@ -220,14 +219,6 @@ class REINFORCE_proteins(object):
                 sequence_to_token_indexes(protein_sequence)
             )
         )
-
-        # if pad_len is not None and len(protein_tokens) < pad_len + 1:
-        #     protein_tokens = (
-        #         protein_tokens + [self.protein_language.padding_index] *
-        #         ((pad_len + 1) - len(protein_tokens))
-        #     )
-
-        # protein_tensor = torch.unsqueeze(torch.Tensor(protein_tokens), 1)
 
         return torch.unsqueeze(protein_tensor, 0)
 
@@ -282,11 +273,7 @@ class REINFORCE_proteins(object):
             latent_z, remove_invalid=remove_invalid
         )
 
-        smiles_t = self.smiles_to_numerical(
-            valid_smiles,
-            pad_len=self.predictor.params['smiles_padding_length'],
-            target='predictor'
-        )
+        smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
 
         # Evaluate drugs
         pred, pred_dict = self.predictor(
@@ -360,7 +347,7 @@ class REINFORCE_proteins(object):
 
 
         """
-        self.affinity_weight = params.get('affinity_weight', 10.)
+        self.affinity_weight = params.get('affinity_weight', 1.)
         self.qed_weight = params.get('qed_weight', 0.)
         self.scscore_weight = params.get('scscore_weight', 0.)
         self.esol_weight = params.get('esol_weight', 0.)
@@ -439,7 +426,7 @@ class REINFORCE_proteins(object):
         rl_loss = 0
         self.optimizer.zero_grad()
 
-        # Encode the cell line
+        # Encode the protein
         latent_z = self.encode_protein(protein, batch_size)
 
         # Produce molecules
@@ -449,7 +436,7 @@ class REINFORCE_proteins(object):
 
         # Get rewards (list, one reward for each valid smiles)
         rewards = self.get_reward(valid_smiles, protein)
-        discounted_rewards = torch.unsqueeze(torch.Tensor(rewards), 1)
+        reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
         padded_nums = torch.nn.utils.rnn.pad_sequence(valid_nums)
@@ -459,7 +446,7 @@ class REINFORCE_proteins(object):
         hidden = self.generator.decoder.init_hidden(num_mols)
         stack = self.generator.decoder.init_stack(num_mols)
 
-        # Compute loss
+        # # Compute loss
         for p in range(len(padded_nums) - 1):
 
             output, hidden, stack = self.generator.decoder(
@@ -468,12 +455,12 @@ class REINFORCE_proteins(object):
             log_probs = F.log_softmax(output, dim=1)
             target_char = torch.unsqueeze(padded_nums[p + 1], 1)
             rl_loss -= torch.mean(
-                log_probs.gather(1, target_char) * discounted_rewards
+                log_probs.gather(1, target_char) * reward_tensor
             )
-            discounted_rewards = discounted_rewards * self.gamma
-
+            # discounted_rewards = discounted_rewards * self.gamma
         summed_reward = torch.mean(torch.Tensor(rewards))
         rl_loss.backward()
+
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
                 list(self.generator.decoder.parameters()) +
