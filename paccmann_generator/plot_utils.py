@@ -75,18 +75,17 @@ def plot_and_compare(
 def plot_and_compare_proteins(
     unbiased_preds, biased_preds, protein, epoch, save_path, mode, bs
 ):
+
     biased_ratio = np.round(
-        100 * (np.sum(biased_preds < 0) / len(biased_preds)), 1
+        100 * (np.sum(biased_preds > 0.5) / len(biased_preds)), 1
     )
     unbiased_ratio = np.round(
-        100 * (np.sum(unbiased_preds < 0) / len(unbiased_preds)), 1
+        100 * (np.sum(unbiased_preds > 0.5) / len(unbiased_preds)), 1
     )
     print(
-        f'NAIVE - {mode}: Percentage of effective compounds = {unbiased_ratio}'
+        f'NAIVE - {mode}: Percentage of binding compounds = {unbiased_ratio}'
     )
-    print(
-        f'BIASED - {mode}: Percentage of effective compounds = {biased_ratio}'
-    )
+    print(f'BIASED - {mode}: Percentage of binding compounds = {biased_ratio}')
 
     fig, ax = plt.subplots()
     sns.kdeplot(
@@ -101,32 +100,33 @@ def plot_and_compare_proteins(
         color='red',
         label=f'Optimized: {biased_ratio}% '
     )
-    valid = f'SMILES validity: \n {round((len(biased_preds)/bs) * 100, 1)}%'
-    txt = "$\mathbf{Drug \ efficacy}$: "
+    valid = f'SMILES validity: {round((len(biased_preds)/bs) * 100, 1)}%'
+    txt = "$\mathbf{Drug \ binding}$: "
     handles, labels = plt.gca().get_legend_handles_labels()
     patch = mpatches.Patch(color='none', label=txt)
 
     handles.insert(0, patch)  # add new patches and labels to list
     labels.insert(0, txt)
 
-    plt.legend(handles, labels, loc='upper right')
-    plt.xlabel('Predicted log(micromolar IC50)')
+    plt.legend(handles, labels, loc='upper left')
+    plt.xlabel('Predicted binding probability')
     plt.ylabel(f'Density of generated molecules (n={bs})')
     t1 = 'PaccMann$^{\mathrm{RL}}$ '
-    c = protein.replace('_', ' ')
-    t2 = f'generator for protein: {c}'
-    plt.title(t1 + t2, size=13)
-    plt.text(0.67, 0.70, valid, weight='bold', transform=plt.gca().transAxes)
+    protein_name = '_'.join(protein.split('=')[1].split('-')[:-1])
+    organism = protein.split('=')[-1]
+    t2 = f'generator for: {protein_name}\n({organism})'
+    plt.title(t1 + t2, size=10)
+    plt.text(0.03, 0.75, valid, weight='bold', transform=plt.gca().transAxes)
     plt.text(
-        0.05,
-        0.8,
-        'Effective compounds',
+        0.55,
+        0.95,
+        'Predicted as binding',
         weight='bold',
         color='grey',
         transform=plt.gca().transAxes
     )
-    ax.axvspan(-10, 0, alpha=0.5, color=[0.85, 0.85, 0.85])
-    plt.xlim([-4, 8])
+    ax.axvspan(0.5, 1.2, alpha=0.5, color=[0.85, 0.85, 0.85])
+    plt.xlim([-0.2, 1.1])
     plt.savefig(
         os.path.join(
             save_path,
