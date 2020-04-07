@@ -40,7 +40,7 @@ class OrganDB(DrugEvaluator):
 
         super(OrganDB, self).__init__()
 
-    def __call__(self, mol, *organ):
+    def __call__(self, mol, organ):
         """
         Returns the OrganDB of a SMILES string or a RdKit molecule.
         """
@@ -78,7 +78,7 @@ class OrganDB(DrugEvaluator):
         
         return average_over_chronics
     
-    def organdb_score(self, mol, *organ):
+    def organdb_score(self, mol, organ):
         # model.load()
         # Test the compound
         smiles_t = LeftPadding(Chem.MolFromSmiles(mol),pad_len=300)
