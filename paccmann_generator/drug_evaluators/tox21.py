@@ -23,7 +23,7 @@ from .drug_evaluator import DrugEvaluator
 from pytoda.transforms import Transform
 from pytoda.smiles.transforms import LeftPadding
 
-# toxic_model_path = os.path.join(
+# tox21_model_path = os.path.join(
 #     os.path.expanduser('~'),
 #     'Box/Molecular_SysBio/data/cytotoxicity/models/Tox21/raw_aug_MCA_5'
 # )
@@ -64,13 +64,20 @@ class Tox21(DrugEvaluator):
     
 
     def tox21_score(self, mol)
-        # model.load(path)
+        # TODO: load model
+        
+        
         with open(os.path.join(tox21_model_path, 'model_params.json')) as f:
             tox21_params = json.load(f)
         mol = MODEL_FACTORY['mca'](tox21_params)
+        
+        #TODO: Compose(transforms)
+        
+        
         # Test the compound
         smiles_t = LeftPadding(Chem.MolFromSmiles(mol),pad_len=300)
         pred_tox21_per_task, pred_dict = tox21_predictor(smiles_t)
         pred_tox21_average = sum(pred_tox21_per_task)/12
+        tox21_score = pred_tox21_average
 
-        return pred_tox21_average
+        return tox21_score

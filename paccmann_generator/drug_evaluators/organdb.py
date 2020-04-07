@@ -79,11 +79,18 @@ class OrganDB(DrugEvaluator):
         return average_over_chronics
     
     def organdb_score(self, mol, organ):
-        # model.load()
+        # TODO: load model
+        
         # Test the compound
+        with open(os.path.join(organdb_model_path, 'model_params.json')) as f:
+            organdb_params = json.load(f)
+        mol = MODEL_FACTORY['mca'](organdb_params)
+        # TODO: Compose(transforms)
+        
         smiles_t = LeftPadding(Chem.MolFromSmiles(mol),pad_len=300)
         pred_organdb_per_task, pred_dict = organdb_predictor(smiles_t)
         #pred_organdb_average = sum(pred_tox21_per_task)/35
         average_over_chronics = task_specificity(pred_organdb_per_task,organ)
+        organdb_score = average_over_chronics
         
-        return average_over_chronics
+        return organdb_score
