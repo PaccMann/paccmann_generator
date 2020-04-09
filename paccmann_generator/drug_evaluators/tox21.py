@@ -64,7 +64,7 @@ class Tox21(DrugEvaluator):
             smiles_tensor {torch.Tensor} -- Tensor of shape 2 x SMILES_tokens
 
         Returns:
-            float -- Rewward
+            float -- Reward
         """
 
         # Test the compound
