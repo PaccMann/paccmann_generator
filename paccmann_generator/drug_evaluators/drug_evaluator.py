@@ -23,11 +23,11 @@ class DrugEvaluator:
     def __init__(self):
         self.device = get_device()
 
-    def __call__(self, smiles):
+    def __call__(self, smiles: str):
 
         raise NotImplementedError
 
-    def load_mca(self, model_path):
+    def load_mca(self, model_path: str):
         """
         Restores pretrained MCA
 
@@ -54,14 +54,14 @@ class DrugEvaluator:
         )
         self.model.eval()
 
-    def compose_smiles_transforms(self, params):
+    def compose_smiles_transforms(self, params: dict) -> Compose:
         """
-        Apply transforms that were applied during model training
+        Create transforms that were applied during model training
 
         Arguments:
-            smiles {str} -- [description]
+            params {dict} -- Model parameter to retrieve transforms
         Returns:
-            smiles (torch.Tensor)
+            Compose -- Object to perform transforms
         """
 
         self.canonical = params.get('canonical', False)
@@ -108,7 +108,7 @@ class DrugEvaluator:
 
         return Compose(transforms)
 
-    def preprocess_smiles(self, smiles):
+    def preprocess_smiles(self, smiles: str) -> torch.Tensor:
         """
         Apply transforms that were applied during model training.
 

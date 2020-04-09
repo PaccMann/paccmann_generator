@@ -1,6 +1,7 @@
 #%%
 """SIDER evaluator."""
 from .drug_evaluator import DrugEvaluator
+import torch
 
 
 class SIDER(DrugEvaluator):
@@ -9,7 +10,7 @@ class SIDER(DrugEvaluator):
     Inherits from DrugEvaluator and evaluates the side effects of a SMILES.
     """
 
-    def __init__(self, model_path):
+    def __init__(self, model_path: str):
         """
 
         Arguments:
@@ -19,7 +20,7 @@ class SIDER(DrugEvaluator):
         super(SIDER, self).__init__()
         self.load_mca(model_path)
 
-    def __call__(self, smiles):
+    def __call__(self, smiles: str) -> float:
         """
         Forward pass through the model.
 
@@ -37,13 +38,13 @@ class SIDER(DrugEvaluator):
         smiles_tensor = self.preprocess_smiles(smiles)
         return self.sider_score(smiles_tensor)
 
-    def sider_score(self, smiles_tensor):
+    def sider_score(self, smiles_tensor: torch.Tensor) -> float:
         """
         Forward pass through the model.
 
         Arguments:
-            smiles_tensor {str} -- SMILES
-
+            smiles_tensor {torch.Tensor} -- Tensor of shape 2 x SMILES_tokens
+            
         Returns:
             float -- Averaged  predictions from the model
         """

@@ -1,6 +1,7 @@
 #%%
 """ClinTox evaluator."""
 from .drug_evaluator import DrugEvaluator
+import torch
 
 
 class ClinTox(DrugEvaluator):
@@ -12,7 +13,7 @@ class ClinTox(DrugEvaluator):
         Second is probability of failure in clinical stage.
     """
 
-    def __init__(self, model_path, reward_type='thresholded'):
+    def __init__(self, model_path: str, reward_type: str = 'thresholded'):
         """
 
         Arguments:
@@ -30,7 +31,7 @@ class ClinTox(DrugEvaluator):
 
         self.set_reward_fn(reward_type)
 
-    def set_reward_fn(self, reward_type):
+    def set_reward_fn(self, reward_type: str):
         self.reward_type = reward_type
         if reward_type == 'thresholded':
             self.reward_fn = lambda x: (
@@ -42,7 +43,7 @@ class ClinTox(DrugEvaluator):
         else:
             raise ValueError(f'Unknown reward_type given: {reward_type}')
 
-    def __call__(self, smiles):
+    def __call__(self, smiles: str) -> float:
         """
         Forward pass through the model.
 
@@ -60,12 +61,12 @@ class ClinTox(DrugEvaluator):
         smiles_tensor = self.preprocess_smiles(smiles)
         return self.clintox_score(smiles_tensor)
 
-    def clintox_score(self, smiles_tensor):
+    def clintox_score(self, smiles_tensor: torch.Tensor) -> float:
         """
         Forward pass through the model.
 
         Arguments:
-            smiles_tensor {str} -- SMILES
+            smiles_tensor {torch.Tensor} -- Tensor of shape 2 x SMILES_tokens
 
         Returns:
             float -- Averaged  predictions from the model
