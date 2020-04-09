@@ -1,38 +1,6 @@
+#%%
 """Tox21 evaluator."""
-import rdkit
-from rdkit import Chem
-import argparse
-import json
-import logging
-import os
-import torch
-import pickle
-import sys
-import seaborn as sns
-import matplotlib.pyplot as plt
-from torch import nn
-import numpy as np
-from collections import OrderedDict
-from paccmann_predictor.utils.utils import get_device
-import pandas as pd
-from cytotox.models import MODEL_FACTORY
-from pytoda.smiles.smiles_language import SMILESLanguage
-from pytoda.smiles.transforms import SMILESToTokenIndexes
-from cytotox.utils.utils import disable_rdkit_logging
 from .drug_evaluator import DrugEvaluator
-from pytoda.transforms import Transform
-from pytoda.smiles.transforms import LeftPadding
-
-# tox21_model_path = os.path.join(
-#     os.path.expanduser('~'),
-#     'Box/Molecular_SysBio/data/cytotoxicity/models/Tox21/raw_aug_MCA_5'
-# )
-
-# smiles_language_path = os.path.join(
-#     os.path.expanduser('~'),
-#     'Box/Molecular_SysBio/data/cytotoxicity/smiles/smiles_language_chembl_gdsc_ccle_tox21_zinc.pkl'
-# )
-
 
 
 class Tox21(DrugEvaluator):
@@ -41,43 +9,54 @@ class Tox21(DrugEvaluator):
     Inherits from DrugEvaluator and evaluates the Tox21 score of a SMILES.
     """
 
-    def __init__(self):
+    def __init__(self, model_path, reward_type='thresholded'):
+        """
+
+        Arguments:
+            model_path {string} -- Path to the pretrained model
+
+        Keyword Arguments:
+            reward_type {string} -- From {'thresholded', 'raw'}. If 'raw' the
+                (inverted) average of the raw predictions is used as reward.
+                If `thresholded`, reward is 1 iff all predictions are < 0.5.
+        """
 
         super(Tox21, self).__init__()
+        self.load_mca(model_path)
 
-    def __call__(self, mol):
+    def __call__(self, smiles):
         """
-        Returns the Tox21 of a SMILES string or a RdKit molecule.
+        Forward pass through the model.
+
+        Arguments:
+            smiles {str} -- SMILES of molecule
+        Returns:
+            float -- Averaged tox21 predictions from the model
+
+        TODO: Should be able to understand iterables
         """
-        # Check if molecule is valid
         # Error handling.
-        if type(mol) == rdkit.Chem.rdchem.Mol:
-            pass
-        elif type(mol) == str:
-            mol = Chem.MolFromSmiles(mol, sanitize=False)
-            if mol is None:
-                raise ValueError("Invalid SMILES string.")
-        else:
-            raise TypeError("Input must be from {str, rdkit.Chem.rdchem.Mol}")
-        
-        return self.tox21_score(mol)
-    
+        if not type(smiles) == str:
+            raise TypeError(f'Input must be String, not :{type(smiles)}')
 
-    def tox21_score(self, mol)
-        # TODO: load model
-        
-        
-        with open(os.path.join(tox21_model_path, 'model_params.json')) as f:
-            tox21_params = json.load(f)
-        mol = MODEL_FACTORY['mca'](tox21_params)
-        
-        #TODO: Compose(transforms)
-        
-        
+        smiles_tensor = self.preprocess_smiles(smiles)
+        return self.tox21_score(smiles_tensor)
+
+    def tox21_score(self, smiles_tensor):
+        """
+        Forward pass through the model.
+
+        Arguments:
+            smiles_tensor {str} -- SMILES
+
+        Returns:
+            float -- [description]
+        """
+
         # Test the compound
-        smiles_t = LeftPadding(Chem.MolFromSmiles(mol),pad_len=300)
-        pred_tox21_per_task, pred_dict = tox21_predictor(smiles_t)
-        pred_tox21_average = sum(pred_tox21_per_task)/12
-        tox21_score = pred_tox21_average
+        predictions, _ = self.model(smiles_tensor)
+        # To allow accessing the raw predictions from outside
+        self.predictions = predictions[0, :]
 
-        return tox21_score
+        # If any assay was positive, no reward is given
+        return 0. if any(self.predictions > 0.5) else 1.
