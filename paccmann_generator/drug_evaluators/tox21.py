@@ -24,6 +24,19 @@ class Tox21(DrugEvaluator):
         super(Tox21, self).__init__()
         self.load_mca(model_path)
 
+        self.set_reward_fn(reward_type)
+
+    def set_reward_fn(self, reward_type):
+        self.reward_type = reward_type
+        if reward_type == 'thresholded':
+            # If any assay was positive, no reward is given
+            self.reward_fn = lambda x: 0. if any(x > 0.5) else 1.
+        elif reward_type == 'raw':
+            # Average probabilities and invert to get reward
+            self.reward_fn = lambda x: 1. - float(x.mean())
+        else:
+            raise ValueError(f'Unknown reward_type given: {reward_type}')
+
     def __call__(self, smiles):
         """
         Forward pass through the model.
@@ -31,7 +44,7 @@ class Tox21(DrugEvaluator):
         Arguments:
             smiles {str} -- SMILES of molecule
         Returns:
-            float -- Averaged tox21 predictions from the model
+            float -- Reward used for the generator (high reward = low toxicity)
 
         TODO: Should be able to understand iterables
         """
@@ -58,5 +71,4 @@ class Tox21(DrugEvaluator):
         # To allow accessing the raw predictions from outside
         self.predictions = predictions[0, :]
 
-        # If any assay was positive, no reward is given
-        return 0. if any(self.predictions > 0.5) else 1.
+        return self.reward_fn(self.predictions)
