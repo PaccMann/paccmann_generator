@@ -34,22 +34,7 @@ parser.add_argument(
     'ic50_model_path', type=str, help='Path to pretrained ic50 model'
 )
 parser.add_argument(
-    'tox21_model_path', type=str, help='Path to pretrained Tox21 model'
-)
-parser.add_argument(
-    'organdb_model_path', type=str, help='Path to pretrained OrganDB model'
-)
-parser.add_argument(
-    'organ_name', type=str, help="OrganDB can predict organ specific toxicity. Organ names to choose from (choose only ONE): 'Adrenal Gland', 'Bone Marrow', 'Brain', 'Eye', 'Heart', 'Kidney', 'Liver', 'Lung', 'Lymph Node', 'Mammary Gland', 'Pancreas', 'Pituitary Gland', 'Spleen', 'Stomach', 'Testes', 'Thymus', 'Thyroid Gland', 'Urinary Bladder', 'Uterus', 'Ovary'"
-)
-parser.add_argument(
-    'smiles_language_path_paccmannRL', type=str, help='Path to SMILES language object for PaccmannRL'
-)
-parser.add_argument(
-    'smiles_language_path_tox21', type=str, help='Path to SMILES language object for Tox21'
-)
-parser.add_argument(
-    'smiles_language_path_organdb', type=str, help='Path to SMILES language object for OrganDB'
+    'smiles_language_path', type=str, help='SMILES language path for generator'
 )
 parser.add_argument(
     'omics_data_path', type=str, help='Omics data path to condition generation'
@@ -63,6 +48,7 @@ parser.add_argument(
 parser.add_argument(
     'site', type=str, help='Name of the cancer site for conditioning.'
 )
+
 
 args = parser.parse_args()
 
@@ -87,14 +73,8 @@ def main(*, parser_namespace):
     ic50_model_path = params.get(
         'ic50_model_path', parser_namespace.ic50_model_path
     )
-    smiles_language_path_paccmannRL = params.get(
-        'smiles_language_path_paccmannRL', parser_namespace.smiles_language_path_paccmannRL
-    )
-    smiles_language_path_tox21 = params.get(
-        'smiles_language_path_tox21', parser_namespace.smiles_language_path_tox21
-    )
-    smiles_language_path_organdb = params.get(
-        'smiles_language_path_organdb', parser_namespace.smiles_language_path_organdb
+    smiles_language_path = params.get(
+        'smiles_language_path', parser_namespace.smiles_language_path
     )
     omics_data_path = params.get(
         'omics_data_path', parser_namespace.omics_data_path
@@ -109,10 +89,7 @@ def main(*, parser_namespace):
     logger.info(f'Model with name {model_name} starts.')
 
     # Load SMILES language
-    smiles_language_paccmannRL = SMILESLanguage.load(smiles_language_path_paccmannRL)
-    smiles_language_tox21 = SMILESLanguage.load(smiles_language_path_tox21)
-    smiles_language_path_organdb = SMILESLanguage.load(smiles_language_path_organdb)
-
+    smiles_language = SMILESLanguage.load(smiles_language_path)
 
     # Load omics profiles for conditional generation,
     # complement with avg per site
@@ -125,7 +102,7 @@ def main(*, parser_namespace):
     gru_encoder = StackGRUEncoder(mol_params)
     gru_decoder = StackGRUDecoder(mol_params)
     generator = TeacherVAE(gru_encoder, gru_decoder)
-    generator.load_model(
+    generator.load(
         os.path.join(
             mol_model_path,
             f"weights/best_{params.get('smiles_metric', 'rec')}.pt"
@@ -160,43 +137,18 @@ def main(*, parser_namespace):
         map_location=get_device()
     )
     paccmann_predictor.eval()
-    
-        # Restore Tox21 model
-    with open(os.path.join(tox21_model_path, 'model_params.json')) as f:
-        tox21_params = json.load(f)
-    tox21_predictor = MODEL_FACTORY['mca'](tox21_params)
-    state_dict = torch.load(os.path.join(tox21_model_path, f'best_ROC-AUC_mca.pt'), map_location=get_device())
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        k = k.replace('batch_norm_layer', 'batch_norm')
-        new_state_dict[k]=v
-    tox21_predictor.load_state_dict(new_state_dict)
-    tox21_predictor.eval()
-        
-    # Restore OrganDB model
-    with open(os.path.join(organdb_model_path, 'model_params.json')) as f:
-        organdb_params = json.load(f)
-    organdb_predictor = MODEL_FACTORY['mca'](organdb_params)
-    state_dict = torch.load(os.path.join(tox21_model_path, f'best_ROC-AUC_mca.pt'),
-        map_location=get_device())
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        k = k.replace('batch_norm_layer', 'batch_norm')
-        new_state_dict[k]=v
-    organdb_predictor.load_state_dict(new_state_dict)
-    organdb_predictor.eval()
 
     # Specifies the baseline model used for comparison
     baseline = REINFORCE(
-        generator, cell_encoder, predictor, omics_df, smiles_language_paccmannRL, {},
-        'baseline', logger
+        generator, cell_encoder, paccmann_predictor, omics_df, smiles_language,
+        {}, 'baseline', logger
     )
 
     # Create a fresh model that will be optimized
     gru_encoder_rl = StackGRUEncoder(mol_params)
     gru_decoder_rl = StackGRUDecoder(mol_params)
     generator_rl = TeacherVAE(gru_encoder_rl, gru_decoder_rl)
-    generator_rl.load_model(
+    generator_rl.load(
         os.path.join(
             mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
         ),
@@ -215,8 +167,8 @@ def main(*, parser_namespace):
     cell_encoder_rl.eval()
     model_folder_name = site + '_' + model_name
     learner = REINFORCE(
-        generator_rl, cell_encoder_rl, predictor, omics_df, smiles_language_paccmannRL,
-        params, model_folder_name, logger
+        generator_rl, cell_encoder_rl, paccmann_predictor, omics_df,
+        smiles_language, params, model_folder_name, logger
     )
 
     # Split the samples for conditional generation and initialize training
@@ -248,7 +200,7 @@ def main(*, parser_namespace):
         learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
 
         # Compare baseline and trained model on cell line
-        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
+        base_smiles, base_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], cell_line
         )
         smiles, preds = learner.generate_compounds_and_evaluate(
@@ -266,21 +218,21 @@ def main(*, parser_namespace):
             tt.append('train')
 
         plot_and_compare(
-            unbiased_preds, preds, site, cell_line, epoch, learner.model_path,
+            base_preds, preds, site, cell_line, epoch, learner.model_path,
             'train', params['eval_batch_size']
         )
 
         # Evaluate on a validation cell line.
         eval_cell_line = np.random.choice(test_omics)
-        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
+        base_smiles, base_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         smiles, preds = learner.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         plot_and_compare(
-            unbiased_preds, preds, site, eval_cell_line, epoch,
-            learner.model_path, 'test', params['eval_batch_size']
+            base_preds, preds, site, eval_cell_line, epoch, learner.model_path,
+            'test', params['eval_batch_size']
         )
         gs = [
             s for i, s in enumerate(smiles)
