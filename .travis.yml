@@ -6,6 +6,7 @@ before_script:
   - docker build -f .travis/Dockerfile -t generator .
 script:
   - docker run -it generator python3 -c "import paccmann_generator"
+  - docker run -it generator python3 -m unittest discover -t . -p "test_*py" paccmann_generator
   - docker run -it generator python3 examples/train_paccmann_rl.py -h
 notifications:
   slack:

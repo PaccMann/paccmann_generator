@@ -34,7 +34,7 @@ parser.add_argument(
     'ic50_model_path', type=str, help='Path to pretrained ic50 model'
 )
 parser.add_argument(
-    'smiles_language_path', type=str, help='Path to SMILES language object'
+    'smiles_language_path', type=str, help='SMILES language path for generator'
 )
 parser.add_argument(
     'omics_data_path', type=str, help='Omics data path to condition generation'
@@ -48,6 +48,7 @@ parser.add_argument(
 parser.add_argument(
     'site', type=str, help='Name of the cancer site for conditioning.'
 )
+
 
 args = parser.parse_args()
 
@@ -101,7 +102,7 @@ def main(*, parser_namespace):
     gru_encoder = StackGRUEncoder(mol_params)
     gru_decoder = StackGRUDecoder(mol_params)
     generator = TeacherVAE(gru_encoder, gru_decoder)
-    generator.load_model(
+    generator.load(
         os.path.join(
             mol_model_path,
             f"weights/best_{params.get('smiles_metric', 'rec')}.pt"
@@ -127,27 +128,27 @@ def main(*, parser_namespace):
     # Restore PaccMann
     with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
         paccmann_params = json.load(f)
-    predictor = MODEL_FACTORY['mca'](paccmann_params)
-    predictor.load(
+    paccmann_predictor = MODEL_FACTORY['mca'](paccmann_params)
+    paccmann_predictor.load(
         os.path.join(
             ic50_model_path,
             f"weights/best_{params.get('ic50_metric', 'rmse')}_mca.pt"
         ),
         map_location=get_device()
     )
-    predictor.eval()
+    paccmann_predictor.eval()
 
     # Specifies the baseline model used for comparison
     baseline = REINFORCE(
-        generator, cell_encoder, predictor, omics_df, smiles_language, {},
-        'baseline', logger
+        generator, cell_encoder, paccmann_predictor, omics_df, smiles_language,
+        {}, 'baseline', logger
     )
 
     # Create a fresh model that will be optimized
     gru_encoder_rl = StackGRUEncoder(mol_params)
     gru_decoder_rl = StackGRUDecoder(mol_params)
     generator_rl = TeacherVAE(gru_encoder_rl, gru_decoder_rl)
-    generator_rl.load_model(
+    generator_rl.load(
         os.path.join(
             mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
         ),
@@ -166,8 +167,8 @@ def main(*, parser_namespace):
     cell_encoder_rl.eval()
     model_folder_name = site + '_' + model_name
     learner = REINFORCE(
-        generator_rl, cell_encoder_rl, predictor, omics_df, smiles_language,
-        params, model_folder_name, logger
+        generator_rl, cell_encoder_rl, paccmann_predictor, omics_df,
+        smiles_language, params, model_folder_name, logger
     )
 
     # Split the samples for conditional generation and initialize training
@@ -199,7 +200,7 @@ def main(*, parser_namespace):
         learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
 
         # Compare baseline and trained model on cell line
-        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
+        base_smiles, base_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], cell_line
         )
         smiles, preds = learner.generate_compounds_and_evaluate(
@@ -217,21 +218,21 @@ def main(*, parser_namespace):
             tt.append('train')
 
         plot_and_compare(
-            unbiased_preds, preds, site, cell_line, epoch, learner.model_path,
+            base_preds, preds, site, cell_line, epoch, learner.model_path,
             'train', params['eval_batch_size']
         )
 
         # Evaluate on a validation cell line.
         eval_cell_line = np.random.choice(test_omics)
-        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
+        base_smiles, base_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         smiles, preds = learner.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         plot_and_compare(
-            unbiased_preds, preds, site, eval_cell_line, epoch,
-            learner.model_path, 'test', params['eval_batch_size']
+            base_preds, preds, site, eval_cell_line, epoch, learner.model_path,
+            'test', params['eval_batch_size']
         )
         gs = [
             s for i, s in enumerate(smiles)
