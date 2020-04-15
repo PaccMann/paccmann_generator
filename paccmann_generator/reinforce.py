@@ -10,7 +10,9 @@ from rdkit import Chem
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pytoda.smiles.transforms import SMILESToTokenIndexes
-from .drug_evaluators import QED, SCScore, ESOL, SAS, Lipinski
+from .drug_evaluators import (
+    QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
+)
 
 
 class REINFORCE(object):
@@ -104,6 +106,43 @@ class REINFORCE(object):
         self.esol = ESOL()
         self.sas = SAS()
         self.lipinski = Lipinski()
+        self.clintox = ClinTox(
+            params.get(
+                'clintox_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'ClinToxMulti'
+                )
+            )
+        )
+        self.sider = SIDER(
+            params.get(
+                'sider_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Sider'
+                )
+            )
+        )
+        self.tox21 = Tox21(
+            params.get(
+                'sider_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Tox21_deepchem'
+                )
+            )
+        )
+        self.organdb = OrganDB(
+            params.get(
+                'sider_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Organdb_github'
+                )
+            ), params['site']
+        )
+
         self.update_reward_fn(params)
         # discount factor
         self.gamma = params.get('gamma', 0.99)
@@ -376,6 +415,10 @@ class REINFORCE(object):
         self.qed_weight = params.get('qed_weight', 1.)
         self.scscore_weight = params.get('scscore_weight', 1.)
         self.esol_weight = params.get('esol_weight', 1.)
+        self.clintox_weight = params.get('clintox_weight', 1.)
+        self.organdb_weight = params.get('organdb_weight', 1.)
+        self.sider_weight = params.get('sider_weight', 1.)
+        self.tox21_weight = params.get('tox21_weight', 1.)
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
@@ -389,8 +432,10 @@ class REINFORCE(object):
                     [
                         self.qed_weight * self.qed(s) + self.scscore_weight *
                         (self.scscore(s) - 1) * -1 / 4 + self.esol_weight *
-                        (1 if self.esol(s) < -8 and self.esol(s) > -2 else 0)
-                        for s in smiles
+                        (1 if self.esol(s) < -8 and self.esol(s) > -2 else 0) +
+                        self.tox21_weight * self.tox21(s) + self.sider_weight *
+                        self.sider(s) + self.clintox_weight * self.clintox(s) +
+                        self.organdb_weight * self.organdb(s) for s in smiles
                     ]
                 )
             )

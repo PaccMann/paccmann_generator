@@ -86,6 +86,8 @@ def main(*, parser_namespace):
         'site', parser_namespace.site
     )   # yapf: disable
 
+    params['site'] = site
+
     logger.info(f'Model with name {model_name} starts.')
 
     # Load SMILES language
@@ -102,7 +104,7 @@ def main(*, parser_namespace):
     gru_encoder = StackGRUEncoder(mol_params)
     gru_decoder = StackGRUDecoder(mol_params)
     generator = TeacherVAE(gru_encoder, gru_decoder)
-    generator.load(
+    generator.load_model(
         os.path.join(
             mol_model_path,
             f"weights/best_{params.get('smiles_metric', 'rec')}.pt"
@@ -141,14 +143,14 @@ def main(*, parser_namespace):
     # Specifies the baseline model used for comparison
     baseline = REINFORCE(
         generator, cell_encoder, paccmann_predictor, omics_df, smiles_language,
-        {}, 'baseline', logger
+        params, 'baseline', logger
     )
 
     # Create a fresh model that will be optimized
     gru_encoder_rl = StackGRUEncoder(mol_params)
     gru_decoder_rl = StackGRUDecoder(mol_params)
     generator_rl = TeacherVAE(gru_encoder_rl, gru_decoder_rl)
-    generator_rl.load(
+    generator_rl.load_model(
         os.path.join(
             mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
         ),

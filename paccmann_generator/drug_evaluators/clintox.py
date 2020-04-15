@@ -34,9 +34,7 @@ class ClinTox(DrugEvaluator):
     def set_reward_fn(self, reward_type: str):
         self.reward_type = reward_type
         if reward_type == 'thresholded':
-            self.reward_fn = lambda x: (
-                1. if x[:, 0] > .5 and x[:, 1] < .5 else 0.
-            )
+            self.reward_fn = lambda x: (1. if x[0] > .5 and x[1] < .5 else 0.)
         elif reward_type == 'raw':
             # Average probabilities
             self.reward_fn = lambda x: float((x[0] + 1 - x[1]) / 2)
