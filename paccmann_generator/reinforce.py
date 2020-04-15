@@ -290,7 +290,7 @@ class REINFORCE(object):
         latent_z += latent_drug
 
         # Generate drugs
-        valid_smiles, valid_nums = self.get_smiles_from_latent(
+        valid_smiles, valid_nums, _, _ = self.get_smiles_from_latent(
             latent_z, remove_invalid=remove_invalid
         )
 
@@ -323,7 +323,7 @@ class REINFORCE(object):
         Returns:
             tuple(list, list): SMILES and numericals.
         """
-        mols_numerical = self.generator.generate(
+        mols_numerical, logits = self.generator.generate(
             latent,
             prime_input=torch.Tensor(
                 [self.smiles_language.start_index]
@@ -333,21 +333,18 @@ class REINFORCE(object):
             temperature=self.temperature
         )  # yapf: disable
         # Retrieve SMILES from numericals
-        smiles_num_tuple = [
+        mol_nums = [mol_num for mol_num in iter(mols_numerical)]
+        smiles, numericals = zip(*[
             (
                 self.smiles_language.token_indexes_to_smiles(mol_num.tolist()),
-                torch.cat(
-                    [
-                        mol_num.long(),
-                        torch.tensor(2 * [self.smiles_language.stop_index])
-                    ]
-                )
-            ) for mol_num in iter(mols_numerical)
-        ]
-        smiles = [sm[0] for sm in smiles_num_tuple]
-        numericals = [sm[1] for sm in smiles_num_tuple]
+                torch.cat([mol_num.long()])
+            )
+            for mol_num in mol_nums
+        ])  # yapf: disable
 
         imgs = [Chem.MolFromSmiles(s, sanitize=True) for s in smiles]
+
+        valid_idxs = [ind for ind in range(len(imgs)) if imgs[ind] is not None]
 
         smiles = [
             smiles[ind] for ind in range(len(imgs))
@@ -362,7 +359,7 @@ class REINFORCE(object):
             f'{self.model_name}: SMILES validity: '
             f'{(len([i for i in imgs if i is not None]) / len(imgs)) * 100:.2f}%.'
         )
-        return smiles, nums
+        return smiles, nums, logits, valid_idxs
 
     def update_reward_fn(self, params):
         """ Set the reward function
@@ -465,34 +462,24 @@ class REINFORCE(object):
         latent_z = self.encode_cell_line(cell_line, batch_size)
 
         # Produce molecules
-        valid_smiles, valid_nums = self.get_smiles_from_latent(
-            latent_z, remove_invalid=True
+        valid_smiles, valid_nums, logits, valid_idxs = (
+            self.get_smiles_from_latent(latent_z, remove_invalid=True)
         )
-
         # Get rewards (list, one reward for each valid smiles)
         rewards = self.get_reward(valid_smiles, cell_line)
-        discounted_rewards = torch.unsqueeze(torch.Tensor(rewards), 1)
+        reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
-        # valid_nums is a list of torch.Tensor, each with varying length,
-        padded_nums = torch.nn.utils.rnn.pad_sequence(valid_nums)
-        num_mols = padded_nums.shape[1]
+        logits = logits[valid_idxs, :, :]
 
-        # Batch processing
-        hidden = self.generator.decoder.init_hidden(num_mols)
-        stack = self.generator.decoder.init_stack(num_mols)
+        # valid_nums is a list of torch.Tensor, each with varying length
+        padded_nums = torch.nn.utils.rnn.pad_sequence(valid_nums).unsqueeze(2)
 
-        # Compute loss
-        for p in range(len(padded_nums) - 1):
-
-            output, hidden, stack = self.generator.decoder(
-                padded_nums[p], hidden, stack
-            )
-            log_probs = F.log_softmax(output, dim=1)
-            target_char = torch.unsqueeze(padded_nums[p + 1], 1)
+        # Compute loss (logits have BS x T x VOCAB)
+        for logit, target_char in zip(logits.permute(1, 0, 2), padded_nums):
+            log_probs = F.log_softmax(logit, dim=1)
             rl_loss -= torch.mean(
-                log_probs.gather(1, target_char) * discounted_rewards
+                log_probs.gather(1, target_char) * reward_tensor
             )
-            discounted_rewards = discounted_rewards * self.gamma
 
         summed_reward = torch.mean(torch.Tensor(rewards))
         rl_loss.backward()
