@@ -126,7 +126,7 @@ class REINFORCE(object):
         )
         self.tox21 = Tox21(
             params.get(
-                'sider_path',
+                'tox21_path',
                 os.path.join(
                     os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
                     'cytotoxicity', 'models', 'Tox21_deepchem'
@@ -135,7 +135,7 @@ class REINFORCE(object):
         )
         self.organdb = OrganDB(
             params.get(
-                'sider_path',
+                'organdb_path',
                 os.path.join(
                     os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
                     'cytotoxicity', 'models', 'Organdb_github'
