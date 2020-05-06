@@ -7,9 +7,9 @@ from paccmann_predictor.utils.utils import get_device
 from pytoda.smiles.smiles_language import SMILESLanguage
 from pytoda.smiles.transforms import (
     Canonicalization, Kekulize, NotKekulize, RemoveIsomery, Selfies,
-    SMILESToTokenIndexes, ToTensor
+    SMILESToTokenIndexes
 )
-from pytoda.transforms import Compose
+from pytoda.transforms import Compose, ToTensor
 import torch
 
 

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from rdkit import Chem
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pytoda.smiles.transforms import LeftPadding, ToTensor
+from pytoda.transforms import LeftPadding, ToTensor
 from .drug_evaluators import QED, SCScore, ESOL, SAS, Lipinski
 from paccmann_predictor.utils.utils import get_device
 
