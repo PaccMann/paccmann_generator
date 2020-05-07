@@ -30,4 +30,8 @@ class QED(DrugEvaluator):
         else:
             raise TypeError("Input must be from {str, rdkit.Chem.rdchem.Mol}")
 
-        return qed(mol)
+        try:
+            return qed(mol)
+        # Catch atom valence exception raised by CalcCrippenDescriptor
+        except Exception:
+            return 0.
