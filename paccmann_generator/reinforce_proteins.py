@@ -15,8 +15,8 @@ from paccmann_predictor.utils.utils import get_device
 class REINFORCE_proteins(object):
 
     def __init__(
-        self, generator, encoder, predictor, protein_df, smiles_language,
-        protein_language, params, model_name, logger
+        self, generator, encoder, predictor, protein_df, params, model_name,
+        logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -26,9 +26,6 @@ class REINFORCE_proteins(object):
             encoder: A gene expression encoder (DenseEncoder object)
             predictor: A IC50 predictor, i.e. PaccMann (MCA object).
             protein_df (pd.Dataframe): Protein sequences of interest.
-            smiles_language: A smiles_language object. Both, predictor and
-                generator need to know this syntax.
-            protein_language: A protein_language object for the encoder
             params: dict with hyperparameter.
             model_name: name of the model.
             logger: a logger.
@@ -56,27 +53,18 @@ class REINFORCE_proteins(object):
             'latent size of encoder and decoder do not match.'
 
         self.protein_df = protein_df
-        self.smiles_language = smiles_language
-        self.protein_language = protein_language
 
-        assert (
-            predictor.protein_padding_length == encoder.protein_padding_length
-        ), (
-            'Predictor and encoder need to have same padding length, found '
-            f'Predictor: {predictor.protein_padding_length} and encoder:'
-            f'{encoder.protein_padding_length}.'
+        self.pad_smiles_predictor = LeftPadding(
+            predictor.smiles_padding_length,
+            predictor.smiles_language.padding_index
         )
-
-        self.pad_smiles = LeftPadding(
-            predictor.smiles_padding_length, smiles_language.padding_index
-        )
-        self.pad_protein = LeftPadding(
-            predictor.protein_padding_length, protein_language.padding_index
+        self.pad_protein_predictor = LeftPadding(
+            predictor.protein_padding_length,
+            predictor.protein_language.padding_index
         )
 
         self.protein_to_tensor = ToTensor(self.device)
         self.smiles_to_tensor = ToTensor(self.device)
-        # self.smiles_to_num = SMILESToTokenIndexes(self.smiles_language)
         self.logger = logger
 
         self.optimizer = torch.optim.Adam(
@@ -187,7 +175,8 @@ class REINFORCE_proteins(object):
             torch.unsqueeze(
                 self.smiles_to_tensor(
                     self.pad_smiles(
-                        self.smiles_language.smiles_to_token_indexes(smiles)
+                        self.predictor.smiles_language.
+                        smiles_to_token_indexes(smiles)
                     )
                 ), 0
             ) for smiles in smiles_list
@@ -221,10 +210,12 @@ class REINFORCE_proteins(object):
 
         if encoder_uses_sequence or predictor_uses_sequence:
             protein_sequence = self.protein_df.loc[protein]['Sequence']
+            # TODO: This may cause bugs if predictor_uses_sequence is True and
+            # uses another protein language object
             sequence_tensor = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein(
-                        self.protein_language.
+                        self.encoder.protein_language.
                         sequence_to_token_indexes(protein_sequence)
                     )
                 ), 0
@@ -321,20 +312,24 @@ class REINFORCE_proteins(object):
         mols_numerical = self.generator.generate(
             latent,
             prime_input=torch.Tensor(
-                [self.smiles_language.start_index]
+                [self.generator.smiles_language.start_index]
             ).long(),
-            end_token=torch.Tensor([self.smiles_language.stop_index]).long(),
+            end_token=torch.Tensor([self.generator.smiles_language.stop_index]).long(),
             generate_len=self.generate_len,
             temperature=self.temperature
         )  # yapf: disable
         # Retrieve SMILES from numericals
         smiles_num_tuple = [
             (
-                self.smiles_language.token_indexes_to_smiles(mol_num.tolist()),
+                self.generator.smiles_language.token_indexes_to_smiles(
+                    mol_num.tolist()
+                ),
                 torch.cat(
                     [
                         mol_num.long(),
-                        torch.tensor(2 * [self.smiles_language.stop_index])
+                        torch.tensor(
+                            2 * [self.generator.smiles_language.stop_index]
+                        )
                     ]
                 )
             ) for mol_num in iter(mols_numerical)
