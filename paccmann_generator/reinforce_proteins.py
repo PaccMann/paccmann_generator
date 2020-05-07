@@ -49,8 +49,8 @@ class REINFORCE_proteins(object):
 
         self.device = get_device()
 
-        assert generator.decoder.latent_dim == encoder.latent_size, \
-            'latent size of encoder and decoder do not match.'
+        # assert generator.decoder.latent_dim == encoder.latent_size, \
+        #     'latent size of encoder and decoder do not match.'
 
         self.protein_df = protein_df
 
@@ -157,6 +157,8 @@ class REINFORCE_proteins(object):
                     protein_logvar.repeat(batch_size, 1)
                 ), 0
             )
+            if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
+                latent_z = latent_z.repeat(1, 1, 2)
         return latent_z
 
     def smiles_to_numerical(self, smiles_list, target='predictor'):
@@ -537,7 +539,7 @@ class REINFORCE_proteins(object):
     ):
         """Save Model to Path."""
         if generator_filepath is not None:
-            self.generator.save_model(
+            self.generator.save(
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath is not None:
