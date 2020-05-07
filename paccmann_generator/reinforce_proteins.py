@@ -136,12 +136,6 @@ class REINFORCE_proteins(object):
         # gradient clipping in decoder
         self.grad_clipping = params.get('clip_grad', None)
 
-    def get_log_molar(self, y):
-        """
-        Converts PaccMann predictions from [0,1] to log(micromolar) range.
-        """
-        return y * (self.ic50_max - self.ic50_min) + self.ic50_min
-
     def reparameterize(self, mu, logvar):
         """
         Applies reparametrization trick to obtain sample from latent space.
@@ -206,21 +200,45 @@ class REINFORCE_proteins(object):
         smiles_tensor = torch.cat(smiles_num, dim=0)
         return smiles_tensor
 
-    def protein_to_numerical(self, protein):
+    def protein_to_numerical(
+        self,
+        protein,
+        encoder_uses_sequence=True,
+        predictor_uses_sequence=True
+    ):
         """
-        Receives a name of a protein
-        Converts it to a numerical torch Tensor according to protein_language
+        Receives a name of a protein.
+        Returns two numerical torch Tensor, the first for the protein encoder,
+        the second for the affinity predictor.
+        Args:
+            protein (str): Name of the protein
+            encoder_uses_sequence (bool): Whether the encoder uses the protein
+                sequence or an embedding.
+            predictor_uses_sequence (bool): Whether the predictor uses the
+                protein sequence or an embedding.
+
         """
 
-        protein_sequence = self.protein_df.loc[protein]['Sequence']
-        protein_tensor = self.protein_to_tensor(
-            self.pad_protein(
-                self.protein_language.
-                sequence_to_token_indexes(protein_sequence)
+        if encoder_uses_sequence or predictor_uses_sequence:
+            protein_sequence = self.protein_df.loc[protein]['Sequence']
+            sequence_tensor = torch.unsqueeze(
+                self.protein_to_tensor(
+                    self.pad_protein(
+                        self.protein_language.
+                        sequence_to_token_indexes(protein_sequence)
+                    )
+                ), 0
             )
-        )
-
-        return torch.unsqueeze(protein_tensor, 0)
+        if (not encoder_uses_sequence) or (not predictor_uses_sequence):
+            # Column names of DF
+            locations = [str(x) for x in range(768)]
+            protein_encoding = self.protein_df.loc[protein][locations]
+            encoding_tensor = torch.unsqueeze(
+                torch.Tensor(protein_encoding), 0
+            )
+        t1 = sequence_tensor if encoder_uses_sequence else encoding_tensor
+        t2 = sequence_tensor if predictor_uses_sequence else encoding_tensor
+        return t1, t2
 
     def generate_compounds_and_evaluate(
         self,
@@ -256,8 +274,10 @@ class REINFORCE_proteins(object):
                 1, batch_size, self.generator.decoder.latent_dim
             )
         else:
-            protein_tensor = self.protein_to_numerical(protein)
-            protein_mu, protein_logvar = self.encoder(protein_tensor)
+            protein_encoder_tensor, protein_predictor_tensor = (
+                self.protein_to_numerical(protein)
+            )
+            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
 
             # TODO: I need to make sure that I only sample around the encoding
             # of the protein, not the entire latent space.
@@ -277,7 +297,7 @@ class REINFORCE_proteins(object):
 
         # Evaluate drugs
         pred, pred_dict = self.predictor(
-            smiles_t, protein_tensor.repeat(len(valid_smiles), 1)
+            smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
         )
         pred = np.squeeze(pred.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
