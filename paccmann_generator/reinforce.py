@@ -9,17 +9,18 @@ import torch.nn.functional as F
 from rdkit import Chem
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pytoda.smiles.transforms import SMILESToTokenIndexes
 from .drug_evaluators import (
     QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
 )
+from pytoda.transforms import LeftPadding, ToTensor
+from paccmann_predictor.utils.utils import get_device
+from paccmann_chemistry.utils.search import SamplingSearch
 
 
 class REINFORCE(object):
 
     def __init__(
-        self, generator, encoder, predictor, gep_df, smiles_language, params,
-        model_name, logger
+        self, generator, encoder, predictor, gep_df, params, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -31,8 +32,6 @@ class REINFORCE(object):
             gep_df: A pandas df with gene expression profiles of cancer cells.
                 GEP values need to be ordered, s.t. both PaccMann and encoder
                 understand it.
-            smiles_language: A smiles_language object. Both, predictor and
-                generator need to know this syntax.
             params: dict with hyperparameter.
             model_name: name of the model.
             logger: a logger.
@@ -55,9 +54,8 @@ class REINFORCE(object):
         self.predictor.eval()
 
         self.gep_df = gep_df
-        self.smiles_language = smiles_language
-        self.smiles_to_num = SMILESToTokenIndexes(self.smiles_language)
         self.logger = logger
+        self.device = get_device()
 
         self.optimizer = torch.optim.Adam(
             (
@@ -70,14 +68,20 @@ class REINFORCE(object):
         )
 
         self.update_params(params)
-        assert generator.decoder.latent_dim == encoder.latent_size, \
-            'latent size of encoder and decoder do not match.'
+        # assert generator.decoder.latent_dim == encoder.latent_size, \
+        #     'latent size of encoder and decoder do not match.'
 
         self.model_name = model_name
         self.model_path = os.path.join(
             params.get('model_folder', 'biased_models'), model_name
         )
         self.weights_path = os.path.join(self.model_path, 'weights/{}')
+
+        self.smiles_to_tensor = ToTensor(self.device)
+        self.pad_smiles_predictor = LeftPadding(
+            params['predictor_smiles_length'],
+            predictor.smiles_language.padding_index
+        )
 
         # If model does not yet exist, create it.
         if not os.path.isdir(self.model_path):
@@ -206,60 +210,34 @@ class REINFORCE(object):
             )
         return latent_z
 
-    def smiles_to_numerical(
-        self, smiles_list, pad_len=None, target='predictor'
-    ):
+    def smiles_to_numerical(self, smiles_list, target='predictor'):
         """
         Receives a list of SMILES.
         Converts it to a numerical torch Tensor according to smiles_language
         """
-        # Convert strings to numbers and padd length.
-        smiles_num = []
-        for smiles in smiles_list:
-            s = self.smiles_to_num(smiles)
-            if pad_len is not None and len(s) < pad_len + 1:
-                s = (
-                    s + [self.smiles_language.padding_index] *
-                    ((pad_len + 1) - len(s))
-                )
 
-            s = torch.unsqueeze(torch.Tensor(s), 1)
-            smiles_num.append(s)
+        if target == 'generator':
+            # NOTE: Code for this in the normal REINFORCE class
+            raise ValueError('Priming drugs not yet supported')
+
+        # Convert strings to numbers and padd length.
+
+        smiles_num = [
+            torch.unsqueeze(
+                self.smiles_to_tensor(
+                    self.pad_smiles_predictor(
+                        self.predictor.smiles_language.
+                        smiles_to_token_indexes(smiles)
+                    )
+                ), 0
+            ) for smiles in smiles_list
+        ]
 
         # Catch scenario where all SMILES are invalid
         if len(smiles_num) == 0:
             return torch.Tensor()
 
-        smiles_tensor = torch.cat(smiles_num, dim=1)
-        if target == 'generator':
-
-            given_batch_size = smiles_tensor.shape[1]
-            model_batch_size = self.generator.decoder.params['batch_size']
-
-            if given_batch_size > model_batch_size:
-                warnings.warn(
-                    f'Generator requires {model_batch_size} samples, you provi'
-                    f'ded {given_batch_size}, last molecules are cutted out.'
-                )
-                smiles_tensor = smiles_tensor[:, :model_batch_size]
-            elif model_batch_size % given_batch_size != 0:
-                warnings.warn(
-                    f'Generator requires {model_batch_size} samples, you provi'
-                    'ded {given_batch_size}, molecules will be repeated.'
-                )
-                t = 2**(floor(log(given_batch_size, 2)))
-                smiles_tensor = smiles_tensor[:, :t].repeat(
-                    1, model_batch_size / t
-                )
-            else:
-                smiles_tensor = smiles_tensor.repeat(
-                    1, model_batch_size // smiles_tensor.shape[1]
-                )
-            smiles_tensor = torch.unsqueeze(smiles_tensor.long(), 2)
-
-        elif target == 'predictor':
-            smiles_tensor = torch.transpose(smiles_tensor, 1, 0)
-
+        smiles_tensor = torch.cat(smiles_num, dim=0)
         return smiles_tensor
 
     def generate_compounds_and_evaluate(
@@ -314,30 +292,26 @@ class REINFORCE(object):
         if type(primed_drug) != str:
             raise TypeError('Provide drug as SMILES string.')
 
-        # Prime the generator (optional)
-        num_drug = self.smiles_to_numerical(
-            [primed_drug], pad_len=None, target='generator'
-        )
-        drug_mu, drug_logvar = self.generator.encode(num_drug)
-        drug_mu, drug_logvar = drug_mu[0, :], drug_logvar[0, :]
-        latent_drug = torch.unsqueeze(
-            self.reparameterize(
-                drug_mu.repeat(batch_size, 1),
-                drug_logvar.repeat(batch_size, 1)
-            ), 0
-        )
-        latent_z += latent_drug
+        # # Prime the generator (optional)
+        # num_drug = self.smiles_to_numerical(
+        #     [primed_drug], pad_len=None, target='generator'
+        # )
+        # drug_mu, drug_logvar = self.generator.encode(num_drug)
+        # drug_mu, drug_logvar = drug_mu[0, :], drug_logvar[0, :]
+        # latent_drug = torch.unsqueeze(
+        #     self.reparameterize(
+        #         drug_mu.repeat(batch_size, 1),
+        #         drug_logvar.repeat(batch_size, 1)
+        #     ), 0
+        # )
+        # latent_z += latent_drug
 
         # Generate drugs
         valid_smiles, valid_nums = self.get_smiles_from_latent(
             latent_z, remove_invalid=remove_invalid
         )
 
-        smiles_t = self.smiles_to_numerical(
-            valid_smiles,
-            pad_len=self.predictor.params['smiles_padding_length'],
-            target='predictor'
-        )
+        smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
 
         # Evaluate drugs
         pred, pred_dict = self.predictor(
@@ -362,31 +336,43 @@ class REINFORCE(object):
         Returns:
             tuple(list, list): SMILES and numericals.
         """
+        if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
+            latent = latent.repeat(1, 1, 2)
         mols_numerical = self.generator.generate(
             latent,
             prime_input=torch.Tensor(
-                [self.smiles_language.start_index]
+                [self.generator.smiles_language.start_index]
             ).long(),
-            end_token=torch.Tensor([self.smiles_language.stop_index]).long(),
+            end_token=torch.Tensor([self.generator.smiles_language.stop_index]).long(),
             generate_len=self.generate_len,
-            temperature=self.temperature
+            search=SamplingSearch(temperature=self.temperature)
         )  # yapf: disable
         # Retrieve SMILES from numericals
         smiles_num_tuple = [
             (
-                self.smiles_language.token_indexes_to_smiles(mol_num.tolist()),
+                self.generator.smiles_language.token_indexes_to_smiles(
+                    mol_num.tolist()
+                ),
                 torch.cat(
                     [
                         mol_num.long(),
-                        torch.tensor(2 * [self.smiles_language.stop_index])
+                        torch.tensor(
+                            2 * [self.generator.smiles_language.stop_index]
+                        )
                     ]
                 )
             ) for mol_num in iter(mols_numerical)
         ]
-        smiles = [sm[0] for sm in smiles_num_tuple]
         numericals = [sm[1] for sm in smiles_num_tuple]
 
+        # NOTE: If SMILES is used instead of SELFIES this line needs adjustment
+        smiles = [
+            self.generator.smiles_language.selfies_to_smiles(sm[0])
+            for sm in smiles_num_tuple
+        ]
+
         imgs = [Chem.MolFromSmiles(s, sanitize=True) for s in smiles]
+        valid_idxs = [ind for ind in range(len(imgs)) if imgs[ind] is not None]
 
         smiles = [
             smiles[ind] for ind in range(len(imgs))
@@ -401,7 +387,7 @@ class REINFORCE(object):
             f'{self.model_name}: SMILES validity: '
             f'{(len([i for i in imgs if i is not None]) / len(imgs)) * 100:.2f}%.'
         )
-        return smiles, nums
+        return smiles, nums, valid_idxs
 
     def update_reward_fn(self, params):
         """ Set the reward function
@@ -466,9 +452,7 @@ class REINFORCE(object):
         """
         # Build up SMILES tensor and GEP tensor
         smiles_tensor = self.smiles_to_numerical(
-            valid_smiles,
-            pad_len=self.predictor.params['smiles_padding_length'],
-            target='predictor'
+            valid_smiles, target='predictor'
         )
 
         # If all SMILES are invalid, no reward is given
@@ -510,34 +494,44 @@ class REINFORCE(object):
         latent_z = self.encode_cell_line(cell_line, batch_size)
 
         # Produce molecules
-        valid_smiles, valid_nums = self.get_smiles_from_latent(
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
             latent_z, remove_invalid=True
         )
 
         # Get rewards (list, one reward for each valid smiles)
         rewards = self.get_reward(valid_smiles, cell_line)
-        discounted_rewards = torch.unsqueeze(torch.Tensor(rewards), 1)
+        reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
         padded_nums = torch.nn.utils.rnn.pad_sequence(valid_nums)
         num_mols = padded_nums.shape[1]
 
+        self.generator.decoder._update_batch_size(num_mols)
+
         # Batch processing
-        hidden = self.generator.decoder.init_hidden(num_mols)
-        stack = self.generator.decoder.init_stack(num_mols)
+        lrps = 1
+        if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
+            lrps = 2
+        hidden = self.generator.decoder.latent_to_hidden(
+            latent_z.repeat(
+                self.generator.decoder.n_layers, 1, lrps
+            )[:, valid_idx, :]
+        )  # yapf: disable
+
+        stack = self.generator.decoder.init_stack
 
         # Compute loss
         for p in range(len(padded_nums) - 1):
-
             output, hidden, stack = self.generator.decoder(
-                padded_nums[p], hidden, stack
+                torch.unsqueeze(padded_nums[p], 0), hidden, stack
             )
+            output = self.generator.decoder.output_layer(output).squeeze()
+
             log_probs = F.log_softmax(output, dim=1)
             target_char = torch.unsqueeze(padded_nums[p + 1], 1)
             rl_loss -= torch.mean(
-                log_probs.gather(1, target_char) * discounted_rewards
+                log_probs.gather(1, target_char) * reward_tensor
             )
-            discounted_rewards = discounted_rewards * self.gamma
 
         summed_reward = torch.mean(torch.Tensor(rewards))
         rl_loss.backward()
@@ -602,7 +596,7 @@ class REINFORCE(object):
     ):
         """Save Model to Path."""
         if generator_filepath is not None:
-            self.generator.save_model(
+            self.generator.save(
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath is not None:
