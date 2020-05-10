@@ -307,7 +307,7 @@ class REINFORCE(object):
         # latent_z += latent_drug
 
         # Generate drugs
-        valid_smiles, valid_nums = self.get_smiles_from_latent(
+        valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
             latent_z, remove_invalid=remove_invalid
         )
 
