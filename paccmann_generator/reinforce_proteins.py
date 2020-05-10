@@ -394,7 +394,7 @@ class REINFORCE_proteins(object):
                     [
                         self.qed_weight * self.qed(s) + self.scscore_weight *
                         (self.scscore(s) - 1) * -1 / 4 + self.esol_weight *
-                        (1 if self.esol(s) < -8 and self.esol(s) > -2 else 0)
+                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0)
                         for s in smiles
                     ]
                 )

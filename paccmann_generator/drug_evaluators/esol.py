@@ -34,7 +34,10 @@ class ESOL(DrugEvaluator):
         else:
             raise TypeError("Input must be from {str, rdkit.Chem.rdchem.Mol}")
 
-        return self.calc_esol(mol)
+        try:
+            return self.calc_esol(mol)
+        except Exception:
+            return 0.
 
     def calc_ap(self, mol):
         """
