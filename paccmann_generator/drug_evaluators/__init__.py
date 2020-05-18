@@ -9,3 +9,4 @@ from .tox21 import Tox21  # noqa
 from .organdb import OrganDB  # noqa
 from .sider import SIDER  # noqa
 from .clintox import ClinTox  # noqa
+from .penalized_logp import PenalizedLogP  # noqa

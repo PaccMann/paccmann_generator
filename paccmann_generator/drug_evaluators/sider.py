@@ -8,6 +8,7 @@ class SIDER(DrugEvaluator):
     """
     SIDER evaluation class.
     Inherits from DrugEvaluator and evaluates the side effects of a SMILES.
+    Model predicts 27 classes
     """
 
     def __init__(self, model_path: str):
