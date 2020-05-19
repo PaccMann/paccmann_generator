@@ -26,14 +26,14 @@ class PenalizedLogP(DrugEvaluator):
         if type(mol) == rdkit.Chem.rdchem.Mol:
             pass
         elif type(mol) == str:
-            mol = Chem.MolFromSmiles(mol, sanitize=False)
+            mol = Chem.MolFromSmiles(mol, sanitize=True)
             if mol is None:
                 raise ValueError("Invalid SMILES string.")
         else:
             raise TypeError("Input must be from {str, rdkit.Chem.rdchem.Mol}")
 
         try:
-            return self.logp(mol) + self.get_num_rings_6(mol) + self.sas(mol)
+            return self.logp(mol) - self.get_num_rings_6(mol) - self.sas(mol)
         # Catch atom valence exception raised by CalcCrippenDescriptor
         except Exception:
             return 0.

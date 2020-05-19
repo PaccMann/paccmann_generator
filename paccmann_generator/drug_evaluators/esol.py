@@ -28,7 +28,7 @@ class ESOL(DrugEvaluator):
         if type(mol) == rdkit.Chem.rdchem.Mol:
             pass
         elif type(mol) == str:
-            mol = Chem.MolFromSmiles(mol, sanitize=False)
+            mol = Chem.MolFromSmiles(mol, sanitize=True)
             if mol is None:
                 raise ValueError("Invalid SMILES string.")
         else:
