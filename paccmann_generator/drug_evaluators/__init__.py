@@ -10,3 +10,4 @@ from .organdb import OrganDB  # noqa
 from .sider import SIDER  # noqa
 from .clintox import ClinTox  # noqa
 from .penalized_logp import PenalizedLogP  # noqa
+from .aromatic_ring import AromaticRing  # noqa
