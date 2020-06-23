@@ -12,8 +12,13 @@ logger = logging.getLogger(__name__)
 class AromaticRing(DrugEvaluator):
     """
     Evaluation class that assesses whether a molecule has an aromatic ring.
-    Inherits from DrugEvaluator.
-    Returns 1 if mol has at least one aromatic ring and 0 otherwise.
+
+    99% of drugs have at least one aromatic ring:
+
+        Roughley, Stephen D., and Allan M. Jordan. "The medicinal chemist’s
+        toolbox: an analysis of reactions used in the pursuit of drug
+        candidates." Journal of medicinal chemistry 54.10 (2011): 3451-3479.
+
     """
 
     def __init__(self):
@@ -34,7 +39,7 @@ class AromaticRing(DrugEvaluator):
         if type(mol) == rdkit.Chem.rdchem.Mol:
             pass
         elif type(mol) == str:
-            mol = Chem.MolFromSmiles(mol, sanitize=False)
+            mol = Chem.MolFromSmiles(mol, sanitize=True)
             if mol is None:
                 raise ValueError("Invalid SMILES string.")
         else:
