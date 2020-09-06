@@ -88,17 +88,35 @@ def plot_and_compare_proteins(
     print(f'BIASED - {mode}: Percentage of binding compounds = {biased_ratio}')
 
     fig, ax = plt.subplots()
-    sns.kdeplot(
+    sns.distplot(
         unbiased_preds,
-        shade=True,
+        kde_kws={
+            'shade': True,
+            'alpha': 0.5,
+            'linewidth': 2,
+            'clip': [0, 1],
+            'kernel': 'cos'
+        },
         color='grey',
-        label=f'Unbiased: {unbiased_ratio}% '
+        label=f'Unbiased: {unbiased_ratio}% ',
+        kde=True,
+        rug=True,
+        hist=False
     )
-    sns.kdeplot(
+    sns.distplot(
         biased_preds,
-        shade=True,
+        kde_kws={
+            'shade': True,
+            'alpha': 0.5,
+            'linewidth': 2,
+            'clip': [0, 1],
+            'kernel': 'cos'
+        },
         color='red',
-        label=f'Optimized: {biased_ratio}% '
+        label=f'Optimized: {biased_ratio}% ',
+        kde=True,
+        rug=True,
+        hist=False
     )
     valid = f'SMILES validity: {round((len(biased_preds)/bs) * 100, 1)}%'
     txt = "$\mathbf{Drug \ binding}$: "
@@ -110,13 +128,14 @@ def plot_and_compare_proteins(
 
     plt.legend(handles, labels, loc='upper left')
     plt.xlabel('Predicted binding probability')
-    plt.ylabel(f'Density of generated molecules (n={bs})')
+    plt.ylabel(f'Density of generated molecules')
     t1 = 'PaccMann$^{\mathrm{RL}}$ '
-    protein_name = '_'.join(protein.split('=')[1].split('-')[:-1])
-    organism = protein.split('=')[-1]
-    t2 = f'generator for: {protein_name}\n({organism})'
+    # protein_name = '_'.join(protein.split('=')[1].split('-')[:-1])
+    # organism = protein.split('=')[-1]
+    # t2 = f'generator for: {protein_name}\n({organism})'
+    protein_name = protein
+    t2 = f'generator for: {protein_name}\n'
     plt.title(t1 + t2, size=10)
-    plt.text(0.03, 0.75, valid, weight='bold', transform=plt.gca().transAxes)
     plt.text(
         0.55,
         0.95,
@@ -126,7 +145,7 @@ def plot_and_compare_proteins(
         transform=plt.gca().transAxes
     )
     ax.axvspan(0.5, 1.2, alpha=0.5, color=[0.85, 0.85, 0.85])
-    plt.xlim([-0.2, 1.1])
+    plt.xlim([0., 1.])
     plt.savefig(
         os.path.join(
             save_path,
