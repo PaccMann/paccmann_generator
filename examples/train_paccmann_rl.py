@@ -179,7 +179,7 @@ def main(*, parser_namespace):
         omics_df, site, params.get('test_fraction', 0.2)
     )
     rewards, rl_losses = [], []
-    gen_mols, gen_cell, gen_ic50, tt = [], [], [], []
+    gen_mols, gen_cell, gen_ic50, modes = [], [], [], []
 
     for epoch in range(1, params['epochs'] + 1):
 
@@ -218,7 +218,7 @@ def main(*, parser_namespace):
             gen_mols.append(s)
             gen_cell.append(cell_line)
             gen_ic50.append(p)
-            tt.append('train')
+            modes.append('train')
 
         plot_and_compare(
             base_preds, preds, site, cell_line, epoch, learner.model_path,
@@ -246,7 +246,7 @@ def main(*, parser_namespace):
             gen_mols.append(s)
             gen_cell.append(eval_cell_line)
             gen_ic50.append(p)
-            tt.append('test')
+            modes.append('test')
 
         inds = np.argsort(preds)
         for i in inds[:5]:
@@ -261,7 +261,8 @@ def main(*, parser_namespace):
                 'cell_line': gen_cell,
                 'SMILES': gen_mols,
                 'IC50': gen_ic50,
-                'mode': tt
+                'mode': modes,
+                'tox21': [learner.tox21(s) for s in gen_mols]
             }
         )
         df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
