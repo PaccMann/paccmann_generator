@@ -42,10 +42,7 @@ class REINFORCE(object):
         self.device = get_device()
 
         self.optimizer = torch.optim.Adam(
-            (
-                list(self.generator.decoder.parameters()) +
-                list(self.encoder.parameters())
-            ),
+            list(self.generator.decoder.parameters()),
             lr=params.get('learning_rate', 0.0001),
             eps=params.get('eps', 0.0001),
             weight_decay=params.get('weight_decay', 0.00001)
@@ -191,7 +188,6 @@ class REINFORCE(object):
         """
         if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
             latent = latent.repeat(1, 1, 2)
-
         mols_numerical = self.generator.generate(
             latent,
             prime_input=torch.Tensor(

@@ -180,6 +180,7 @@ def main(*, parser_namespace):
     )
     rewards, rl_losses = [], []
     gen_mols, gen_cell, gen_ic50, modes = [], [], [], []
+    logger.info('Models restored, start training.')
 
     for epoch in range(1, params['epochs'] + 1):
 

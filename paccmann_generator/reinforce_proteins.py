@@ -1,5 +1,4 @@
-"""PaccMann^RL: Policy gradient class (implemented through REINFORCE)."""
-import json
+"""PaccMann^RL: Protein-driven drug generation"""
 import os
 
 import matplotlib.pyplot as plt
@@ -7,14 +6,10 @@ import numpy as np
 import seaborn as sns
 import torch
 import torch.nn.functional as F
-from rdkit import Chem
 
-from paccmann_chemistry.utils.search import SamplingSearch
-from paccmann_predictor.utils.utils import get_device
 from pytoda.transforms import LeftPadding, ToTensor
-from .reinforce import REINFORCE
 
-from .drug_evaluators import ESOL, QED, SAS, Lipinski, SCScore, Tox21
+from .reinforce import REINFORCE
 
 
 class ReinforceProtein(REINFORCE):
@@ -41,7 +36,9 @@ class ReinforceProtein(REINFORCE):
             generator to maximize the custom reward function get_reward.
         """
 
-        super(REINFORCE, self).__init__()
+        super(ReinforceProtein, self).__init__(
+            generator, encoder, params, model_name, logger
+        )  # yapf: disable
 
         self.predictor = predictor
         self.predictor.eval()

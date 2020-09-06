@@ -1,4 +1,4 @@
-"""PaccMann^RL: Policy gradient class (implemented through REINFORCE)."""
+"""PaccMann^RL: Omics-driven drug generation."""
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -35,7 +35,7 @@ class ReinforceOmic(REINFORCE):
             generator to maximize the custom reward function get_reward.
         """
 
-        super(REINFORCE, self).__init__(
+        super(ReinforceOmic, self).__init__(
             generator, encoder, params, model_name, logger
         )  # yapf: disable
 
@@ -72,7 +72,7 @@ class ReinforceOmic(REINFORCE):
         """
         return y * (self.ic50_max - self.ic50_min) + self.ic50_min
 
-    def encode_omic(self, cell_line=None, batch_size=128):
+    def encode_cell_line(self, cell_line=None, batch_size=128):
         """
         Encodes cell line in latent space with GEP encoder.
         """
