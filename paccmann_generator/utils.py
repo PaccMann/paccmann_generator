@@ -56,9 +56,12 @@ def omics_data_splitter(omics_df, site, test_fraction):
         train_cell_lines, test_cell_lines (tuple): A tuple of lists with the
             cell line names used for training and testing
     """
-    cell_lines = np.array(
-        list(set(omics_df[omics_df['site'] == site]['cell_line']))
-    )
+    if site != 'all':
+        cell_lines = np.array(
+            list(set(omics_df[omics_df['site'] == site]['cell_line']))
+        )
+    else:
+        cell_lines = np.array(list(set(omics_df['cell_line'])))
     inds = np.arange(cell_lines.shape[0])
     np.random.shuffle(inds)
     test_cell_lines = cell_lines[inds[:ceil(len(cell_lines) * test_fraction)]]

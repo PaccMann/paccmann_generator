@@ -18,7 +18,7 @@ SITES = [
     'Adrenal Gland', 'Bone Marrow', 'Brain', 'Eye', 'Heart', 'Kidney', 'Liver',
     'Lung', 'Lymph Node', 'Mammary Gland', 'Pancreas', 'Pituitary Gland',
     'Spleen', 'Stomach', 'Testes', 'Thymus', 'Thyroid Gland',
-    'Urinary Bladder', 'Uterus', 'Ovary'
+    'Urinary Bladder', 'Uterus', 'Ovary', 'All'
 ]
 TOXICITIES = {
     'chronic': ['CHR'],
@@ -107,7 +107,9 @@ class OrganDB(DrugEvaluator):
                 )
             ) if x
         ]
-        if len(class_indices) == 0:
+        if len(class_indices) == 0 and site == 'all':
+            class_indices = list(range(35))
+        elif len(class_indices) == 0:
             raise ValueError(
                 f'Model cannot perform predictions for organ: {site} and '
                 f'toxicity type: {toxicity_type}.'
