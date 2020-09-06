@@ -9,7 +9,7 @@ from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
 )
 from paccmann_chemistry.utils import get_device
-from paccmann_generator import REINFORCE
+from paccmann_generator import ReinforceOmic
 from paccmann_generator.plot_utils import plot_and_compare, plot_loss
 from paccmann_generator.utils import add_avg_profile, omics_data_splitter
 from paccmann_omics.encoders import ENCODER_FACTORY
@@ -141,7 +141,7 @@ def main(*, parser_namespace):
     paccmann_predictor._associate_language(paccmann_smiles_language)
 
     # Specifies the baseline model used for comparison
-    baseline = REINFORCE(
+    baseline = ReinforceOmic(
         generator, cell_encoder, paccmann_predictor, omics_df, params,
         'baseline', logger
     )
@@ -169,7 +169,7 @@ def main(*, parser_namespace):
     )
     cell_encoder_rl.eval()
     model_folder_name = site + '_' + model_name
-    learner = REINFORCE(
+    learner = ReinforceOmic(
         generator_rl, cell_encoder_rl, paccmann_predictor, omics_df, params,
         model_folder_name, logger
     )

@@ -1,36 +1,30 @@
 """PaccMann^RL: Policy gradient class (implemented through REINFORCE)."""
-import json
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
 import torch.nn.functional as F
-from rdkit import Chem
 
-from paccmann_chemistry.utils.search import SamplingSearch
-from paccmann_predictor.utils.utils import get_device
-from pytoda.transforms import LeftPadding, ToTensor
+from pytoda.transforms import LeftPadding
+
 from .reinforce import REINFORCE
 
-from .drug_evaluators import ESOL, QED, SAS, Lipinski, SCScore, Tox21
 
-
-class ReinforceProtein(REINFORCE):
+class ReinforceOmic(REINFORCE):
 
     def __init__(
-        self, generator, encoder, predictor, protein_df, params, model_name,
-        logger
+        self, generator, encoder, predictor, gep_df, params, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
 
         Args:
-            generator (nn.Module): SMILES generator object.
-            encoder (nn.Module): A gene expression encoder (DenseEncoder object)
-            predictor (nn.Module): A binding affinity predictor
-            protein_df (pd.Dataframe): Protein sequences of interest.
+            generator: SMILES generator object.
+            encoder: An omic encoder (DenseEncoder object, e.g. GEP)
+            predictor: A IC50 predictor, i.e. PaccMann (MCA object).
+            gep_df: A pandas df with gene expression profiles of cancer cells.
+                GEP values need to be ordered, s.t. both PaccMann and encoder
+                understand it.
             params: dict with hyperparameter.
             model_name: name of the model.
             logger: a logger.
@@ -41,34 +35,20 @@ class ReinforceProtein(REINFORCE):
             generator to maximize the custom reward function get_reward.
         """
 
-        super(REINFORCE, self).__init__()
+        super(REINFORCE, self).__init__(
+            generator, encoder, params, model_name, logger
+        )  # yapf: disable
 
         self.predictor = predictor
         self.predictor.eval()
 
-        self.protein_df = protein_df
-
         self.pad_smiles_predictor = LeftPadding(
-            predictor.smiles_padding_length,
+            params['predictor_smiles_length'],
             predictor.smiles_language.padding_index
         )
-        self.pad_protein_predictor = LeftPadding(
-            predictor.protein_padding_length,
-            predictor.protein_language.padding_index
-        )
 
-        self.protein_to_tensor = ToTensor(self.device)
+        self.gep_df = gep_df
         self.update_params(params)
-
-        self.tox21 = Tox21(
-            params.get(
-                'tox21_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'Tox21_deepchem'
-                )
-            )
-        )
 
     def update_params(self, params):
         """Update parameter
@@ -78,77 +58,47 @@ class ReinforceProtein(REINFORCE):
         """
         super().update_params(params)
 
-    def encode_protein(self, protein=None, batch_size=128):
-        """
-        Encodes protein in latent space with protein encoder.
-        Args:
-            protein (str): Name of a protein
-            batch_size (int): batch_size
-        """
-        if protein is None:
-            latent_z = torch.randn(1, batch_size, self.encoder.latent_size)
-        else:
+        # critic: upper and lower bound of log(IC50) for de-normalization
+        self.ic50_min = params.get('IC50_min', -8.77435)
+        self.ic50_max = params.get('IC50_max', 11.83146)
+        # efficacy threshold: log(X mol) = thresh. thresh=0 -> 1 micromolar
+        self.ic50_threshold = params.get('IC50_threshold', 0.0)
+        # rewards for efficient and all other valid molecules
+        self.rewards = params.get('rewards', (11, 1))
 
-            protein_tensor, _ = self.protein_to_numerical(
-                protein, encoder_uses_sequence=False
-            )
-            protein_mu, protein_logvar = self.encoder(protein_tensor)
+    def get_log_molar(self, y):
+        """
+        Converts PaccMann predictions from [0,1] to log(micromolar) range.
+        """
+        return y * (self.ic50_max - self.ic50_min) + self.ic50_min
 
-            latent_z = torch.unsqueeze(
-                self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
-                ), 0
-            )
+    def encode_omic(self, cell_line=None, batch_size=128):
+        """
+        Encodes cell line in latent space with GEP encoder.
+        """
+        gep_t = torch.unsqueeze(
+            torch.Tensor(
+                self.gep_df[
+                    self.gep_df['cell_line'] == cell_line  # yapf: disable
+                ].iloc[0].gene_expression.values
+            ),
+            0
+        )
+        cell_mu, cell_logvar = self.encoder(gep_t)
+
+        latent_z = torch.unsqueeze(
+            self.reparameterize(
+                cell_mu.repeat(batch_size, 1),
+                cell_logvar.repeat(batch_size, 1)
+            ), 0
+        )
         return latent_z
-
-    def protein_to_numerical(
-        self,
-        protein,
-        encoder_uses_sequence=True,
-        predictor_uses_sequence=True
-    ):
-        """
-        Receives a name of a protein.
-        Returns two numerical torch Tensor, the first for the protein encoder,
-        the second for the affinity predictor.
-        Args:
-            protein (str): Name of the protein
-            encoder_uses_sequence (bool): Whether the encoder uses the protein
-                sequence or an embedding.
-            predictor_uses_sequence (bool): Whether the predictor uses the
-                protein sequence or an embedding.
-
-        """
-
-        if encoder_uses_sequence or predictor_uses_sequence:
-            protein_sequence = self.protein_df.loc[protein]['Sequence']
-            # TODO: This may cause bugs if encoder_uses_sequence is True and
-            # uses another protein language object
-            sequence_tensor = torch.unsqueeze(
-                self.protein_to_tensor(
-                    self.pad_protein_predictor(
-                        self.predictor.protein_language.
-                        sequence_to_token_indexes(protein_sequence)
-                    )
-                ), 0
-            )
-        if (not encoder_uses_sequence) or (not predictor_uses_sequence):
-            # Column names of DF
-            locations = [str(x) for x in range(768)]
-            protein_encoding = self.protein_df.loc[protein][locations]
-            encoding_tensor = torch.unsqueeze(
-                torch.Tensor(protein_encoding), 0
-            )
-        t1 = sequence_tensor if encoder_uses_sequence else encoding_tensor
-        t2 = sequence_tensor if predictor_uses_sequence else encoding_tensor
-        return t1, t2
 
     def generate_compounds_and_evaluate(
         self,
         epoch,
         batch_size,
-        protein=None,
+        cell_line=None,
         primed_drug=' ',
         return_latent=False,
         remove_invalid=True
@@ -159,40 +109,56 @@ class ReinforceProtein(REINFORCE):
         Args:
             epoch (int): The training epoch.
             batch_size (int): The batch size.
-            protein (str): A string, the protein used to drive generator.
+            cell_line (str): A string, the cell_line used to drive generator.
             primed_drug (str): SMILES string to prime the generator.
 
         Returns:
             np.array: Predictions from PaccMann.
         """
-        if primed_drug != ' ':
-            raise ValueError('Drug priming not yet supported.')
-
         self.predictor.eval()
         self.encoder.eval()
         self.generator.eval()
 
-        if protein is None:
+        if cell_line is None:
             # Generate a random molecule
             latent_z = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
             )
         else:
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False
-                )
+            gep_t = torch.unsqueeze(
+                torch.Tensor(
+                    self.gep_df[
+                        self.gep_df['cell_line'] == cell_line  # yapf: disable
+                    ].iloc[0].gene_expression.values
+                ),
+                0
             )
-            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
+            cell_mu, cell_logvar = self.encoder(gep_t)
 
             # TODO: I need to make sure that I only sample around the encoding
-            # of the protein, not the entire latent space.
+            # of the cell, not the entire latent space.
             latent_z = torch.unsqueeze(
                 self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
+                    cell_mu.repeat(batch_size, 1),
+                    cell_logvar.repeat(batch_size, 1)
                 ), 0
             )
+        if type(primed_drug) != str:
+            raise TypeError('Provide drug as SMILES string.')
+
+        # # Prime the generator (optional)
+        # num_drug = self.smiles_to_numerical(
+        #     [primed_drug], pad_len=None, target='generator'
+        # )
+        # drug_mu, drug_logvar = self.generator.encode(num_drug)
+        # drug_mu, drug_logvar = drug_mu[0, :], drug_logvar[0, :]
+        # latent_drug = torch.unsqueeze(
+        #     self.reparameterize(
+        #         drug_mu.repeat(batch_size, 1),
+        #         drug_logvar.repeat(batch_size, 1)
+        #     ), 0
+        # )
+        # latent_z += latent_drug
 
         # Generate drugs
         valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
@@ -203,15 +169,15 @@ class ReinforceProtein(REINFORCE):
 
         # Evaluate drugs
         pred, pred_dict = self.predictor(
-            smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
+            smiles_t, gep_t.repeat(len(valid_smiles), 1)
         )
-        pred = np.squeeze(pred.detach().numpy())
+        log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
 
         if return_latent:
-            return valid_smiles, pred, latent_z
+            return valid_smiles, log_preds, latent_z
         else:
-            return valid_smiles, pred
+            return valid_smiles, log_preds
 
     def update_reward_fn(self, params):
         """ Set the reward function
@@ -222,38 +188,48 @@ class ReinforceProtein(REINFORCE):
 
         """
         super().update_reward_fn(params)
-        self.affinity_weight = params.get('affinity_weight', 1.)
-        self.tox21_weight = params.get('tox21_weight', .5)
+        self.paccmann_weight = params.get('paccmann_weight', 1.)
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
+        # SCScore is in [1, 5] with 5 being worst
+        # QED is naturally in [0, 1] with 1 being best
         self.reward_fn = (
-            lambda smiles, protein: (
-                self.affinity_weight * self.
-                get_reward_affinity(smiles, protein) + np.
-                array([self.tox21_weight * self.tox21(s) for s in smiles])
+            lambda smiles, cell: (
+                self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
+                np.array(
+                    [
+                        self.qed_weight * self.qed(s) + self.scscore_weight *
+                        ((self.scscore(s) - 1) *
+                         (-1 / 4) + 1) + self.esol_weight *
+                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
+                        self.tox21_weight * self.tox21(s) + self.sider_weight *
+                        self.sider(s) + self.clintox_weight * self.clintox(s) +
+                        self.organdb_weight * self.organdb(s) for s in smiles
+                    ]
+                )
             )
         )
 
-    def get_reward(self, valid_smiles, protein):
+    def get_reward(self, valid_smiles, cell_line):
         """Get the reward
         
         Arguments:
             valid_smiles (list): A list of valid SMILES strings.
-            protein (str): Name of the target protein
+            cell_line (str): String containing the cell line to index.
         
         Returns:
             np.array: computed reward.
         """
-        return self.reward_fn(valid_smiles, protein)
+        return self.reward_fn(valid_smiles, cell_line)
 
-    def get_reward_affinity(self, valid_smiles, protein):
+    def get_reward_paccmann(self, valid_smiles, cell_line):
         """
-        Get the reward from affinity predictor
+        Get the reward from PaccMann
 
         Args:
             valid_smiles (list): A list of valid SMILES strings.
-            protein (str): Name of target protein
+            cell_line (str): String containing the cell line to index.
 
         Returns:
             np.array: computed reward (fixed to 1/(1+exp(x))).
@@ -267,22 +243,28 @@ class ReinforceProtein(REINFORCE):
         if len(smiles_tensor) == 0:
             return 0
 
-        _, protein_tensor = self.protein_to_numerical(
-            protein, encoder_uses_sequence=False
+        gep_t = torch.unsqueeze(
+            torch.Tensor(
+                self.gep_df[
+                    self.gep_df['cell_line'] == cell_line  # yapf: disable
+                ].iloc[0].gene_expression.values
+            ),
+            0
         )
-
         pred, pred_dict = self.predictor(
-            smiles_tensor, protein_tensor.repeat(smiles_tensor.shape[0], 1)
+            smiles_tensor, gep_t.repeat(len(valid_smiles), 1)
         )
+        log_micromolar_pred = self.get_log_molar(
+            np.squeeze(pred.detach().numpy())
+        )
+        return 1 / (1 + np.exp(log_micromolar_pred))
 
-        return np.squeeze(pred.detach().numpy())
-
-    def policy_gradient(self, protein, epoch, batch_size=10):
+    def policy_gradient(self, cell_line, epoch, batch_size=10):
         """
         Implementation of the policy gradient algorithm.
 
         Args:
-            protein (str): Name of protein to generate drugs.
+            cell_line (str):  cell line to generate drugs.
             epoch (int): training epoch.
             batch_size (int): batch size.
 
@@ -292,8 +274,8 @@ class ReinforceProtein(REINFORCE):
         rl_loss = 0
         self.optimizer.zero_grad()
 
-        # Encode the protein
-        latent_z = self.encode_protein(protein, batch_size)
+        # Encode the cell line
+        latent_z = self.encode_cell_line(cell_line, batch_size)
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
@@ -301,7 +283,7 @@ class ReinforceProtein(REINFORCE):
         )
 
         # Get rewards (list, one reward for each valid smiles)
-        rewards = self.get_reward(valid_smiles, protein)
+        rewards = self.get_reward(valid_smiles, cell_line)
         reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
@@ -319,10 +301,10 @@ class ReinforceProtein(REINFORCE):
                 self.generator.decoder.n_layers, 1, lrps
             )[:, valid_idx, :]
         )  # yapf: disable
+
         stack = self.generator.decoder.init_stack
 
-        # # Compute loss
-        output = torch.Tensor()
+        # Compute loss
         for p in range(len(padded_nums) - 1):
             output, hidden, stack = self.generator.decoder(
                 torch.unsqueeze(padded_nums[p], 0), hidden, stack
@@ -334,10 +316,9 @@ class ReinforceProtein(REINFORCE):
             rl_loss -= torch.mean(
                 log_probs.gather(1, target_char) * reward_tensor
             )
-            # discounted_rewards = discounted_rewards * self.gamma
+
         summed_reward = torch.mean(torch.Tensor(rewards))
         rl_loss.backward()
-
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
                 list(self.generator.decoder.parameters()) +
