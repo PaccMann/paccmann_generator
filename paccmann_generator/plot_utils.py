@@ -16,6 +16,7 @@ def plot_and_compare(
     unbiased_ratio = np.round(
         100 * (np.sum(unbiased_preds < 0) / len(unbiased_preds)), 1
     )
+    print(f'Site: {site}, cell line: {cell_line}')
     print(
         f'NAIVE - {mode}: Percentage of effective compounds = {unbiased_ratio}'
     )
