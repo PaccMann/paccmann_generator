@@ -7,10 +7,10 @@ import torch.nn.functional as F
 
 from pytoda.transforms import LeftPadding
 
-from .reinforce import REINFORCE
+from .reinforce import Reinforce
 
 
-class ReinforceOmic(REINFORCE):
+class ReinforceOmic(Reinforce):
 
     def __init__(
         self, generator, encoder, predictor, gep_df, params, model_name, logger
@@ -257,7 +257,11 @@ class ReinforceOmic(REINFORCE):
         log_micromolar_pred = self.get_log_molar(
             np.squeeze(pred.detach().numpy())
         )
-        return 1 / (1 + np.exp(log_micromolar_pred))
+        lmps = [
+            lmp if lmp < self.ic50_threshold else 10
+            for lmp in log_micromolar_pred
+        ]
+        return 1 / (1 + np.exp(lmps))
 
     def policy_gradient(self, cell_line, epoch, batch_size=10):
         """

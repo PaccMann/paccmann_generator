@@ -9,10 +9,10 @@ import torch.nn.functional as F
 
 from pytoda.transforms import LeftPadding, ToTensor
 
-from .reinforce import REINFORCE
+from .reinforce import Reinforce
 
 
-class ReinforceProtein(REINFORCE):
+class ReinforceProtein(Reinforce):
 
     def __init__(
         self, generator, encoder, predictor, protein_df, params, model_name,

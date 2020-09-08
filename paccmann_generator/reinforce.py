@@ -6,12 +6,12 @@ from rdkit import Chem
 from .drug_evaluators import (
     QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
 )
-from pytoda.transforms import LeftPadding, ToTensor
+from pytoda.transforms import ToTensor
 from paccmann_predictor.utils.utils import get_device
 from paccmann_chemistry.utils.search import SamplingSearch
 
 
-class REINFORCE(object):
+class Reinforce(object):
 
     def __init__(self, generator, encoder, params, model_name, logger):
         """
@@ -30,7 +30,7 @@ class REINFORCE(object):
             generator to maximize the custom reward function get_reward.
         """
 
-        super(REINFORCE, self).__init__()
+        super(Reinforce, self).__init__()
 
         self.generator = generator
         self.generator.eval()
@@ -155,6 +155,13 @@ class REINFORCE(object):
         if target == 'generator':
             # NOTE: Code for this in the normal REINFORCE class
             raise ValueError('Priming drugs not yet supported')
+
+        # TODO: Workaround since predictor does not understand aromatic carbons
+        smiles_list = [
+            Chem.MolToSmiles(
+                Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+            ).replace(':', '') for s in smiles_list
+        ]
 
         # Convert strings to numbers and padd length.
         smiles_num = [
