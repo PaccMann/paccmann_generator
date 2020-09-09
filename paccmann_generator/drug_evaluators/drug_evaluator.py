@@ -1,7 +1,7 @@
 """Drug evaluator."""
 import json
 import os
-from cytotox.models import MODEL_FACTORY
+from toxsmi.models import MODEL_FACTORY
 
 from paccmann_predictor.utils.utils import get_device
 from pytoda.smiles.smiles_language import SMILESLanguage

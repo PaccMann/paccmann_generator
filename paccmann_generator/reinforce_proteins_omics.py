@@ -190,7 +190,7 @@ class ReinforceProteinOmics(Reinforce):
         t1 = sequence_tensor if encoder_uses_sequence else encoding_tensor
         t2 = sequence_tensor if predictor_uses_sequence else encoding_tensor
         return t1, t2
-
+# %%
     def generate_compounds_and_evaluate(
         self,
         epoch,
@@ -228,7 +228,7 @@ class ReinforceProteinOmics(Reinforce):
             latent_z = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
             )
-        else if cell_line is None:
+        elif cell_line is None:
             # Generate a random molecule
             latent_z = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
@@ -278,23 +278,23 @@ class ReinforceProteinOmics(Reinforce):
 
         # TODO: combine bowth predictors
         # Evaluate drugs
-        pred, pred_dict = self.predictorProtein(
+        predP, pred_dictP = self.predictorProtein(
             smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
         )
-        pred = np.squeeze(pred.detach().numpy())
+        predP = np.squeeze(predP.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
         # Evaluate drugs
-        pred, pred_dict = self.predictorOmics(
+        predO, pred_dictO = self.predictorOmics(
             smiles_t, gep_t.repeat(len(valid_smiles), 1)
         )
-        log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
+        log_predsO = self.get_log_molar(np.squeeze(predO.detach().numpy()))
 
+        print(predP, predO, pred_dictP, pred_dictO, log_predsO)
         if return_latent:
             return valid_smiles, pred, latent_z
         else:
             return valid_smiles, pred
-
-
+# %%
     def update_reward_fn(self, params):
         """ Set the reward function
         
