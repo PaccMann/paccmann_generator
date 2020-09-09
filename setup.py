@@ -7,10 +7,10 @@ setup(
     description='Multimodal generative models for PaccMann^RL.',
     long_description=open('README.md').read(),
     url='https://github.com/PaccMann/paccmann_generator',
-    author='Jannis Born, Matteo Manica, Ali Oskooei, Joris Cadow',
+    author='Jannis Born, Matteo Manica, Ali Oskooei, Joris Cadow, Patricia Stoll',
     author_email=(
         'jab@zurich.ibm.com, drugilsberg@gmail.com, '
-        'ali.oskooei@gmail.com, joriscadow@gmail.com'
+        'ali.oskooei@gmail.com, joriscadow@gmail.com, tol@zurich.ibm.com'
     ),
     install_requires=[
         'numpy', 'pandas', 'matplotlib', 'seaborn', 'pytoda>=0.0.4',
