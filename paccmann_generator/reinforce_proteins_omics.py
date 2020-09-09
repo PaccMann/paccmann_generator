@@ -278,13 +278,13 @@ class ReinforceProteinOmics(Reinforce):
 
         # TODO: combine bowth predictors
         # Evaluate drugs
-        pred, pred_dict = self.predictor(
+        pred, pred_dict = self.predictorProtein(
             smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
         )
         pred = np.squeeze(pred.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
         # Evaluate drugs
-        pred, pred_dict = self.predictor(
+        pred, pred_dict = self.predictorOmics(
             smiles_t, gep_t.repeat(len(valid_smiles), 1)
         )
         log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
@@ -304,30 +304,44 @@ class ReinforceProteinOmics(Reinforce):
 
         """
         super().update_reward_fn(params)
+        self.paccmann_weight = params.get('paccmann_weight', 1.)
         self.affinity_weight = params.get('affinity_weight', 1.)
         self.tox21_weight = params.get('tox21_weight', .5)
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
-            lambda smiles, protein: (
+            lambda smiles, protein, cell: (
                 self.affinity_weight * self.
                 get_reward_affinity(smiles, protein) + np.
-                array([self.tox21_weight * self.tox21(s) for s in smiles])
+                array([self.tox21_weight * self.tox21(s) for s in smiles]) +
+                self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
+                np.array(
+                    [
+                        self.qed_weight * self.qed(s) + self.scscore_weight *
+                        ((self.scscore(s) - 1) *
+                         (-1 / 4) + 1) + self.esol_weight *
+                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
+                        self.tox21_weight * self.tox21(s) + self.sider_weight *
+                        self.sider(s) + self.clintox_weight * self.clintox(s) +
+                        self.organdb_weight * self.organdb(s) for s in smiles
+                    ]
+                )
             )
         )
 
-    def get_reward(self, valid_smiles, protein):
+    def get_reward(self, valid_smiles, protein, cell_line):
         """Get the reward
         
         Arguments:
             valid_smiles (list): A list of valid SMILES strings.
-            protein (str): Name of the target protein
+            protein (str): Name of the target protein.
+            cell_line (str): String containing the cell line to index.
         
         Returns:
             np.array: computed reward.
         """
-        return self.reward_fn(valid_smiles, protein)
+        return self.reward_fn(valid_smiles, protein, cell_line)
 
     def get_reward_affinity(self, valid_smiles, protein):
         """
@@ -359,12 +373,53 @@ class ReinforceProteinOmics(Reinforce):
 
         return np.squeeze(pred.detach().numpy())
 
-    def policy_gradient(self, protein, epoch, batch_size=10):
+    def get_reward_paccmann(self, valid_smiles, cell_line):
+        """
+        Get the reward from PaccMann
+
+        Args:
+            valid_smiles (list): A list of valid SMILES strings.
+            cell_line (str): String containing the cell line to index.
+
+        Returns:
+            np.array: computed reward (fixed to 1/(1+exp(x))).
+        """
+        # Build up SMILES tensor and GEP tensor
+        smiles_tensor = self.smiles_to_numerical(
+            valid_smiles, target='predictor'
+        )
+
+        # If all SMILES are invalid, no reward is given
+        if len(smiles_tensor) == 0:
+            return 0
+
+        gep_t = torch.unsqueeze(
+            torch.Tensor(
+                self.gep_df[
+                    self.gep_df['cell_line'] == cell_line  # yapf: disable
+                ].iloc[0].gene_expression.values
+            ),
+            0
+        )
+        pred, pred_dict = self.predictor(
+            smiles_tensor, gep_t.repeat(len(valid_smiles), 1)
+        )
+        log_micromolar_pred = self.get_log_molar(
+            np.squeeze(pred.detach().numpy())
+        )
+        lmps = [
+            lmp if lmp < self.ic50_threshold else 10
+            for lmp in log_micromolar_pred
+        ]
+        return 1 / (1 + np.exp(lmps))
+
+    def policy_gradient(self, protein, cell_line, epoch, batch_size=10):
         """
         Implementation of the policy gradient algorithm.
 
         Args:
             protein (str): Name of protein to generate drugs.
+            cell_line (str):  cell line to generate drugs.
             epoch (int): training epoch.
             batch_size (int): batch size.
 
@@ -375,7 +430,12 @@ class ReinforceProteinOmics(Reinforce):
         self.optimizer.zero_grad()
 
         # Encode the protein
-        latent_z = self.encode_protein(protein, batch_size)
+        latent_z_protein = self.encode_protein(protein, batch_size)
+        
+        # Encode the cell line
+        latent_z_omics = self.encode_cell_line(cell_line, batch_size)
+
+        latent_z = torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
@@ -383,7 +443,7 @@ class ReinforceProteinOmics(Reinforce):
         )
 
         # Get rewards (list, one reward for each valid smiles)
-        rewards = self.get_reward(valid_smiles, protein)
+        rewards = self.get_reward(valid_smiles, protein, cell_line)
         reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
