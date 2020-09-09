@@ -190,7 +190,7 @@ class ReinforceProteinOmics(Reinforce):
         t1 = sequence_tensor if encoder_uses_sequence else encoding_tensor
         t2 = sequence_tensor if predictor_uses_sequence else encoding_tensor
         return t1, t2
-# %%
+
     def generate_compounds_and_evaluate(
         self,
         epoch,
@@ -294,7 +294,7 @@ class ReinforceProteinOmics(Reinforce):
             return valid_smiles, pred, latent_z
         else:
             return valid_smiles, pred
-# %%
+
     def update_reward_fn(self, params):
         """ Set the reward function
         
