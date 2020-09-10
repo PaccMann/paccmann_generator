@@ -151,9 +151,9 @@ def update_new_params(self, params):
 
         # maximal length of generated molecules
         self.generate_len = params.get(
-            'generate_len', self.predictor.params['smiles_padding_length'] - 2
+            'generate_len', self.efficacy_predictor.params['smiles_padding_length'] - 2
         )
-        
+
         # smoothing factor for softmax during token sampling in decoder
         self.temperature = params.get('temperature', 0.8)
         # gradient clipping in decoder
