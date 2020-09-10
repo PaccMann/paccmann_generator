@@ -15,7 +15,7 @@ from .reinforce import Reinforce
 class ReinforceProteinOmics(Reinforce):
 
     def __init__(
-        self, generator, encoderProtein, encoderOmics, predictorProtein, predictorOmics, 
+        self, generator, encoderProtein, encoderOmics, predictor, 
         protein_df, gep_df, params, model_name, logger
     ):
         """
@@ -44,15 +44,15 @@ class ReinforceProteinOmics(Reinforce):
         super(ReinforceProteinOmics, self).__init__(
             generator, encoderProtein, params, model_name, logger
         )  # yapf: disable
+        
+        #just for test
+        params['site'] = 'Brain'
 
-        self.predictorProtein = predictorProtein
-        self.predictorProtein.eval()
+        self.predictor = predictor
+        self.predictor.eval()
 
         self.encoderOmics = encoderOmics
         self.encoderOmics.eval()
-
-        self.predictorOmics = predictorOmics
-        self.predictorOmics.eval()
 
         self.protein_df = protein_df
 
