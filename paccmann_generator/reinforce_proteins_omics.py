@@ -287,13 +287,42 @@ def update_new_params(self, params):
 
         if protein is None:
             # Generate a random molecule
-            latent_z = torch.randn(
+            latent_z_protein = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
+            )
+            
+            gep_t = torch.unsqueeze(
+                torch.Tensor(
+                    self.gep_df[
+                        self.gep_df['cell_line'] == cell_line  # yapf: disable
+                    ].iloc[0].gene_expression.values
+                ),
+                0
+            )
+            latent_z_omics = torch.unsqueeze(
+                self.reparameterize(
+                    cell_mu.repeat(batch_size, 1),
+                    cell_logvar.repeat(batch_size, 1)
+                ), 0
             )
         elif cell_line is None:
             # Generate a random molecule
-            latent_z = torch.randn(
+            latent_z_omics = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
+            )
+
+            cell_mu, cell_logvar = self.encoderOmics(gep_t)
+            protein_encoder_tensor, protein_predictor_tensor = (
+                self.protein_to_numerical(
+                    protein, encoder_uses_sequence=False
+                )
+            )
+            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
+            latent_z_protein = torch.unsqueeze(
+                self.reparameterize(
+                    protein_mu.repeat(batch_size, 1),
+                    protein_logvar.repeat(batch_size, 1)
+                ), 0
             )
         else:
             protein_encoder_tensor, protein_predictor_tensor = (
@@ -329,7 +358,7 @@ def update_new_params(self, params):
                 ), 0
             )
 
-            latent_z = torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
+        latent_z = torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
 
         # Generate drugs
         valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
