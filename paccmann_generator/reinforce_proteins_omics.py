@@ -15,8 +15,8 @@ from .reinforce import Reinforce
 class ReinforceProteinOmics(Reinforce):
 
     def __init__(
-        self, generator, encoderProtein, encoderOmics, predictor, 
-        protein_df, gep_df, params, model_name, logger
+        self, generator, encoderProtein, encoderOmics, affinity_predictor, 
+        efficacy_predicot, protein_df, gep_df, params, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -48,13 +48,16 @@ class ReinforceProteinOmics(Reinforce):
         #just for test
         params['site'] = 'Brain'
 
-        self.predictor = predictor
-        self.predictor.eval()
-
         self.encoderOmics = encoderOmics
         self.encoderOmics.eval()
 
         self.protein_df = protein_df
+        
+        self.affinity_predictor = affinity_predictor
+        self.affinity_predictor.eval()
+
+        self.efficacy_predictor = efficacy_predictor
+        self.efficacy_predictor.eval()
 
         self.gep_df = gep_df
         self.update_params(params)
@@ -87,7 +90,8 @@ class ReinforceProteinOmics(Reinforce):
         Args:
             params (dict): Dict with (new) parameters
         """
-        super().update_params(params)
+        #super().update_params(params)
+        update_new_params(params)
 
          # critic: upper and lower bound of log(IC50) for de-normalization
         self.ic50_min = params.get('IC50_min', -8.77435)
@@ -96,6 +100,64 @@ class ReinforceProteinOmics(Reinforce):
         self.ic50_threshold = params.get('IC50_threshold', 0.0)
         # rewards for efficient and all other valid molecules
         self.rewards = params.get('rewards', (11, 1))
+
+def update_new_params(self, params):
+        # parameter for reward function
+        self.qed = QED()
+        self.scscore = SCScore()
+        self.esol = ESOL()
+        self.sas = SAS()
+        self.lipinski = Lipinski()
+        self.clintox = ClinTox(
+            params.get(
+                'clintox_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'ClinToxMulti'
+                )
+            )
+        )
+        self.sider = SIDER(
+            params.get(
+                'sider_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Sider'
+                )
+            )
+        )
+        self.tox21 = Tox21(
+            params.get(
+                'tox21_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Tox21_deepchem'
+                )
+            )
+        )
+        self.organdb = OrganDB(
+            params.get(
+                'organdb_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Organdb_github'
+                )
+            ), params['site']
+        )
+
+        self.update_reward_fn(params)
+        # discount factor
+        self.gamma = params.get('gamma', 0.99)
+
+        # maximal length of generated molecules
+        self.generate_len = params.get(
+            'generate_len', self.predictor.params['smiles_padding_length'] - 2
+        )
+        
+        # smoothing factor for softmax during token sampling in decoder
+        self.temperature = params.get('temperature', 0.8)
+        # gradient clipping in decoder
+        self.grad_clipping = params.get('clip_grad', None)
 
     def get_log_molar(self, y):
         """
