@@ -17,4 +17,3 @@ dependencies:
     - paccmann_predictor @ git+https://github.com/PaccMann/paccmann_predictor@latest
     - paccmann_chemistry @ git+https://github.com/PaccMann/paccmann_chemistry@latest
     - paccmann_omics @ git+https://github.com/PaccMann/paccmann_omics@latest
-    - paccmann_affinity @ git+https://github.com/PaccMann/paccmann_affinity
