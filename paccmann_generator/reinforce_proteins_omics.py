@@ -8,7 +8,9 @@ import torch
 import torch.nn.functional as F
 
 from pytoda.transforms import LeftPadding, ToTensor
-
+from .drug_evaluators import (
+    QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
+)
 from .reinforce import Reinforce
 
 
@@ -16,7 +18,7 @@ class ReinforceProteinOmics(Reinforce):
 
     def __init__(
         self, generator, encoderProtein, encoderOmics, affinity_predictor, 
-        efficacy_predicot, protein_df, gep_df, params, model_name, logger
+        efficacy_predictor, protein_df, gep_df, params, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -25,8 +27,8 @@ class ReinforceProteinOmics(Reinforce):
             generator (nn.Module): SMILES generator object.
             encoderProtein (nn.Module): A protein encoder (DenseEncoder object)
             encoderOmics (nn.Module): A gene expression encoder (DenseEncoder object)
-            predictorProtein (nn.Module): A binding affinity predictor
-            predictorOmics: A IC50 predictor, i.e. PaccMann (MCA object).
+            affinity_predictor (nn.Module): A binding affinity predictor
+            efficacy_predictor: A IC50 predictor, i.e. PaccMann (MCA object).
             protein_df (pd.Dataframe): Protein sequences of interest.
             gep_df: A pandas df with gene expression profiles of cancer cells.
                 GEP values need to be ordered, s.t. both PaccMann and encoder
@@ -44,9 +46,6 @@ class ReinforceProteinOmics(Reinforce):
         super(ReinforceProteinOmics, self).__init__(
             generator, encoderProtein, params, model_name, logger
         )  # yapf: disable
-        
-        #just for test
-        params['site'] = 'Brain'
 
         self.encoderOmics = encoderOmics
         self.encoderOmics.eval()
@@ -63,12 +62,12 @@ class ReinforceProteinOmics(Reinforce):
         self.update_params(params)
 
         self.pad_smiles_predictor = LeftPadding(
-            predictor.smiles_padding_length,
-            predictor.smiles_language.padding_index
+            params['predictor_smiles_length'],
+            efficacy_predictor.smiles_language.padding_index
         )
         self.pad_protein_predictor = LeftPadding(
-            predictor.protein_padding_length,
-            predictor.protein_language.padding_index
+            affinity_predictor.protein_padding_length,
+            affinity_predictor.protein_language.padding_index
         )
 
         self.protein_to_tensor = ToTensor(self.device)
@@ -91,7 +90,7 @@ class ReinforceProteinOmics(Reinforce):
             params (dict): Dict with (new) parameters
         """
         #super().update_params(params)
-        update_new_params(params)
+        self.update_new_params(params)
 
          # critic: upper and lower bound of log(IC50) for de-normalization
         self.ic50_min = params.get('IC50_min', -8.77435)
@@ -101,7 +100,7 @@ class ReinforceProteinOmics(Reinforce):
         # rewards for efficient and all other valid molecules
         self.rewards = params.get('rewards', (11, 1))
 
-def update_new_params(self, params):
+    def update_new_params(self, params):
         # parameter for reward function
         self.qed = QED()
         self.scscore = SCScore()
@@ -237,7 +236,7 @@ def update_new_params(self, params):
             sequence_tensor = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.predictorProtein.protein_language.
+                        self.affinity_predictor.protein_language.
                         sequence_to_token_indexes(protein_sequence)
                     )
                 ), 0
@@ -279,8 +278,8 @@ def update_new_params(self, params):
         if primed_drug != ' ':
             raise ValueError('Drug priming not yet supported.')
 
-        self.predictorProtein.eval()
-        self.predictorOmics.eval()
+        self.affinity_predictor.eval()
+        self.efficacy_predictor.eval()
         self.encoder.eval()
         self.encoderOmics.eval()
         self.generator.eval()
@@ -369,13 +368,13 @@ def update_new_params(self, params):
 
         # TODO: combine bowth predictors
         # Evaluate drugs
-        predP, pred_dictP = self.predictorProtein(
+        predP, pred_dictP = self.affinity_predictor(
             smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
         )
         predP = np.squeeze(predP.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
         # Evaluate drugs
-        predO, pred_dictO = self.predictorOmics(
+        predO, pred_dictO = self.efficacy_predictor(
             smiles_t, gep_t.repeat(len(valid_smiles), 1)
         )
         log_predsO = self.get_log_molar(np.squeeze(predO.detach().numpy()))
