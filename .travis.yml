@@ -3,11 +3,15 @@ services:
   - docker
 before_script:
   - docker pull drugilsberg/rdkit-ubuntu:latest
-  - docker build -f .travis/Dockerfile -t generator .
+  - docker build -f .travis/IC50/Dockerfile -t generator_ic50 .
+  - docker build -f .travis/affinity/Dockerfile -t generator_affinity .
 script:
-  - docker run -it generator python3 -c "import paccmann_generator"
-  - docker run -it generator python3 -m unittest discover -t . -p "test_*py" paccmann_generator
-  - docker run -it generator python3 examples/train_paccmann_rl.py -h
+  - docker run -it generator_ic50 python3 -c "import paccmann_generator"
+  - docker run -it generator_ic50 python3 -m unittest discover -t . -p "test_*py" paccmann_generator
+  - docker run -it generator_ic50 python3 examples/IC50/train_paccmann_rl.py -h
+  - docker run -it generator_affinity python3 -c "import paccmann_generator"
+  - docker run -it generator_affinity python3 -m unittest discover -t . -p "test_*py" paccmann_generator
+  - docker run -it generator_affinity python3 examples/affinity/train_paccmann_rl.py -h
 notifications:
   slack:
     secure: syLtEsvzH5ejn9gvaK7cXQsBeiSWgcPxapI2P/2wu4LXV4dKdrSEqS38bu6EbxxWYZmfJ+oF2EMRQj4v45VOW1xkfBKAgkuwB6BYDJrIKTP7kJSYZ2+pXvbsRQ4NSisaxlV2rjuZoXhN/hSKli1Zud/6st7oP/u71YCo0dD4DkjWG2sh/FM6SajxCbjP1qN3SZehOntB/sCVzymAUnxHqcuVioblTdDZp3SBcIVTsDNWsGF513mvpSyAALwAPr07gg204CIuwoTgNmQJgxxZkH/+byMqpY5mwTiAMsbracX5QQGkpnfMo8Hf3tDFVHixJBeO6kuxovoNlvG17ew3CG8Rd7uD4zWqmuVqSRl8BgUMynUe+X/tgNNE7BMWJCC6/0HQUOT3frmjfgghpLRcOT+NjeLlsHzEfkJAVyN3UvM0k+oqe8xajLVHge/zuMUXMIPPmI0uFvOkMspnZgPy/Kmg4TqQ/3N0ffOJOG90Bh7MtusVY8Wjzccj04Dl6aFUcmDj11k6W8wFgpLZjKGEy59HuviSprWSVTXADfJLitzknCEh4G43UugPJrUiM6OORz0RIntwzXOB2itC9F5dek2BAkBixk43Oy+VyYprt3Zur93ptvPd6OWvUzdxdQcCgYENo4D6yJoTg5iORNvah6Ydlg2Z3Lwv1siCB9awydI=
