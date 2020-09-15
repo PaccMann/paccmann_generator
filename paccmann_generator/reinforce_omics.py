@@ -194,6 +194,16 @@ class ReinforceOmic(Reinforce):
         # inside the range [0, 1].
         # SCScore is in [1, 5] with 5 being worst
         # QED is naturally in [0, 1] with 1 being best
+        tox_f = lambda x: 0
+        if self.tox21_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.tox21_weight * self.tox21(s)
+        if self.sider_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.sider_weight * self.sider(s)
+        if self.clintox_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.clintox_weight * self.clintox(s)
+        if self.organdb_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.organdb_weight * self.organdb(s)
+
         self.reward_fn = (
             lambda smiles, cell: (
                 self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
@@ -202,10 +212,8 @@ class ReinforceOmic(Reinforce):
                         self.qed_weight * self.qed(s) + self.scscore_weight *
                         ((self.scscore(s) - 1) *
                          (-1 / 4) + 1) + self.esol_weight *
-                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
-                        self.tox21_weight * self.tox21(s) + self.sider_weight *
-                        self.sider(s) + self.clintox_weight * self.clintox(s) +
-                        self.organdb_weight * self.organdb(s) for s in smiles
+                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0
+                         ) + tox_f(s) for s in smiles
                     ]
                 )
             )

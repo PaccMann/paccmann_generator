@@ -57,16 +57,6 @@ class ReinforceProtein(Reinforce):
         self.protein_to_tensor = ToTensor(self.device)
         self.update_params(params)
 
-        self.tox21 = Tox21(
-            params.get(
-                'tox21_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'Tox21_deepchem'
-                )
-            )
-        )
-
     def update_params(self, params):
         """Update parameter
 
@@ -220,15 +210,24 @@ class ReinforceProtein(Reinforce):
         """
         super().update_reward_fn(params)
         self.affinity_weight = params.get('affinity_weight', 1.)
-        self.tox21_weight = params.get('tox21_weight', .5)
+
+        tox_f = lambda x: 0
+        if self.tox21_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.tox21_weight * self.tox21(s)
+        if self.sider_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.sider_weight * self.sider(s)
+        if self.clintox_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.clintox_weight * self.clintox(s)
+        if self.organdb_weight > 0.:
+            tox_f = lambda s: tox_f(s) + self.organdb_weight * self.organdb(s)
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
             lambda smiles, protein: (
-                self.affinity_weight * self.
-                get_reward_affinity(smiles, protein) + np.
-                array([self.tox21_weight * self.tox21(s) for s in smiles])
+                self.affinity_weight * self.get_reward_affinity(
+                    smiles, protein
+                ) + np.array([tox_f(s) for s in smiles])
             )
         )
 
