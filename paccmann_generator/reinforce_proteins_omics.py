@@ -18,7 +18,7 @@ class ReinforceProteinOmics(Reinforce):
 
     def __init__(
         self, generator, encoderProtein, encoderOmics, affinity_predictor, 
-        efficacy_predictor, protein_df, gep_df, params, model_name, logger
+        efficacy_predictor, protein_df, gep_df, params, generator_smiles_language, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -72,6 +72,8 @@ class ReinforceProteinOmics(Reinforce):
 
         self.protein_to_tensor = ToTensor(self.device)
         self.update_params(params)
+
+        self.generator_smiles_language = generator_smiles_language
 
         self.tox21 = Tox21(
             params.get(
@@ -289,48 +291,27 @@ class ReinforceProteinOmics(Reinforce):
             latent_z_protein = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
             )
-            
-            gep_t = torch.unsqueeze(
-                torch.Tensor(
-                    self.gep_df[
-                        self.gep_df['cell_line'] == cell_line  # yapf: disable
-                    ].iloc[0].gene_expression.values
-                ),
-                0
+        else:
+            #protein
+            protein_encoder_tensor, protein_predictor_tensor = (
+                self.protein_to_numerical(
+                    protein, encoder_uses_sequence=False, predictor_uses_sequence=False
+                )
             )
-            latent_z_omics = torch.unsqueeze(
+            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
+            latent_z_protein = torch.unsqueeze(
                 self.reparameterize(
-                    cell_mu.repeat(batch_size, 1),
-                    cell_logvar.repeat(batch_size, 1)
+                    protein_mu.repeat(batch_size, 1),
+                    protein_logvar.repeat(batch_size, 1)
                 ), 0
             )
-        elif cell_line is None:
+        if cell_line is None:
             # Generate a random molecule
             latent_z_omics = torch.randn(
                 1, batch_size, self.generator.decoder.latent_dim
             )
-
-            cell_mu, cell_logvar = self.encoderOmics(gep_t)
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False
-                )
-            )
-            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
-            latent_z_protein = torch.unsqueeze(
-                self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
-                ), 0
-            )
         else:
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False
-                )
-            )
-            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
-
+            #cell:
             gep_t = torch.unsqueeze(
                 torch.Tensor(
                     self.gep_df[
@@ -340,16 +321,6 @@ class ReinforceProteinOmics(Reinforce):
                 0
             )
             cell_mu, cell_logvar = self.encoderOmics(gep_t)
-
-            # TODO: I need to make sure that I only sample around the encoding
-            # of the protein, not the entire latent space.
-            latent_z_protein = torch.unsqueeze(
-                self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
-                ), 0
-            )
-
             latent_z_omics = torch.unsqueeze(
                 self.reparameterize(
                     cell_mu.repeat(batch_size, 1),
