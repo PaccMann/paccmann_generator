@@ -198,23 +198,23 @@ class Reinforce(object):
         mols_numerical = self.generator.generate(
             latent,
             prime_input=torch.Tensor(
-                [self.generator.smiles_language.start_index]
+                [self.generator_smiles_language.start_index]    ########################### generator.smiles_language
             ).long(),
-            end_token=torch.Tensor([self.generator.smiles_language.stop_index]).long(),
+            end_token=torch.Tensor([self.generator_smiles_language.stop_index]).long(),
             generate_len=self.generate_len,
             search=SamplingSearch(temperature=self.temperature)
         )  # yapf: disable
         # Retrieve SMILES from numericals
         smiles_num_tuple = [
             (
-                self.generator.smiles_language.token_indexes_to_smiles(
+                self.generator_smiles_language.token_indexes_to_smiles(
                     mol_num.tolist()
                 ),
                 torch.cat(
                     [
                         mol_num.long(),
                         torch.tensor(
-                            2 * [self.generator.smiles_language.stop_index]
+                            2 * [self.generator_smiles_language.stop_index]
                         )
                     ]
                 )
@@ -224,7 +224,7 @@ class Reinforce(object):
 
         # NOTE: If SMILES is used instead of SELFIES this line needs adjustment
         smiles = [
-            self.generator.smiles_language.selfies_to_smiles(sm[0])
+            self.generator_smiles_language.selfies_to_smiles(sm[0])
             for sm in smiles_num_tuple
         ]
 
