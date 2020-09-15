@@ -21,7 +21,7 @@ def get_version(rel_path):
 
 setup(
     name='paccmann_generator',
-    version=get_version('paccmann_generator/__init__.py',
+    version=get_version('paccmann_generator/__init__.py'),
     description='Multimodal generative models for PaccMann^RL.',
     long_description=open('README.md').read(),
     url='https://github.com/PaccMann/paccmann_generator',
