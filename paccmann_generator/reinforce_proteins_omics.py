@@ -59,7 +59,7 @@ class ReinforceProteinOmics(Reinforce):
         self.efficacy_predictor.eval()
 
         self.gep_df = gep_df
-        self.update_params(params)
+       # self.update_params(params) # its there twice
 
         self.pad_smiles_predictor = LeftPadding(
             params['predictor_smiles_length'],
