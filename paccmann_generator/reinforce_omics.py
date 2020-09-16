@@ -172,7 +172,7 @@ class ReinforceOmic(Reinforce):
             smiles_t, gep_t.repeat(len(valid_smiles), 1)
         )
         log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
-        #self.plot_hist(log_preds, cell_line, epoch, batch_size)
+        self.plot_hist(log_preds, cell_line, epoch, batch_size)
 
         if return_latent:
             return valid_smiles, log_preds, latent_z
@@ -181,9 +181,9 @@ class ReinforceOmic(Reinforce):
 
     def update_reward_fn(self, params):
         """ Set the reward function
-        
+
         Arguments:
-            params {dict} -- Hyperparameter for PaccMann reward function
+            params (dict): Hyperparameter for PaccMann reward function
 
 
         """
@@ -194,6 +194,18 @@ class ReinforceOmic(Reinforce):
         # inside the range [0, 1].
         # SCScore is in [1, 5] with 5 being worst
         # QED is naturally in [0, 1] with 1 being best
+        def tox_f(s):
+            x = 0
+            if self.tox21_weight > 0.:
+                x += self.tox21_weight * self.tox21(s)
+            if self.sider_weight > 0.:
+                x += self.sider_weight * self.sider(s)
+            if self.clintox_weight > 0.:
+                x += self.clintox_weight * self.clintox(s)
+            if self.organdb_weight > 0.:
+                x += self.organdb_weight * self.organdb(s)
+            return x
+
         self.reward_fn = (
             lambda smiles, cell: (
                 self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
@@ -202,10 +214,8 @@ class ReinforceOmic(Reinforce):
                         self.qed_weight * self.qed(s) + self.scscore_weight *
                         ((self.scscore(s) - 1) *
                          (-1 / 4) + 1) + self.esol_weight *
-                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
-                        self.tox21_weight * self.tox21(s) + self.sider_weight *
-                        self.sider(s) + self.clintox_weight * self.clintox(s) +
-                        self.organdb_weight * self.organdb(s) for s in smiles
+                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0
+                         ) + tox_f(s) for s in smiles
                     ]
                 )
             )
@@ -213,11 +223,11 @@ class ReinforceOmic(Reinforce):
 
     def get_reward(self, valid_smiles, cell_line):
         """Get the reward
-        
+
         Arguments:
             valid_smiles (list): A list of valid SMILES strings.
             cell_line (str): String containing the cell line to index.
-        
+
         Returns:
             np.array: computed reward.
         """
