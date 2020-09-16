@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
+from rdkit import Chem
 import torch.nn.functional as F
 
 from pytoda.transforms import LeftPadding, ToTensor
@@ -61,9 +62,13 @@ class ReinforceProteinOmics(Reinforce):
         self.gep_df = gep_df
        # self.update_params(params) # its there twice
 
-        self.pad_smiles_predictor = LeftPadding(
+        self.pad_efficacy_smiles_predictor = LeftPadding(
             params['predictor_smiles_length'],
             efficacy_predictor.smiles_language.padding_index
+        )
+        self.pad_affinity_smiles_predictor = LeftPadding(
+            affinity_predictor.smiles_padding_length,
+            affinity_predictor.smiles_language.padding_index
         )
         self.pad_protein_predictor = LeftPadding(
             affinity_predictor.protein_padding_length,
@@ -232,7 +237,7 @@ class ReinforceProteinOmics(Reinforce):
         """
 
         if encoder_uses_sequence or predictor_uses_sequence:
-            protein_sequence = self.protein_df.loc[protein]['Sequence']
+            protein_sequence = self.protein_df.loc[protein]['sequence']
             # TODO: This may cause bugs if encoder_uses_sequence is True and
             # uses another protein language object
             sequence_tensor = torch.unsqueeze(
@@ -295,7 +300,7 @@ class ReinforceProteinOmics(Reinforce):
             #protein
             protein_encoder_tensor, protein_predictor_tensor = (
                 self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False, predictor_uses_sequence=False
+                    protein, encoder_uses_sequence=False, predictor_uses_sequence=True
                 )
             )
             protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
@@ -335,18 +340,19 @@ class ReinforceProteinOmics(Reinforce):
             latent_z, remove_invalid=remove_invalid
         )
 
-        smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
+        smiles_t_affinity = self.smiles_to_numerical(valid_smiles, target='affinity')
+        smiles_t_efficacy = self.smiles_to_numerical(valid_smiles, target='efficacy')
 
         # TODO: combine bowth predictors
         # Evaluate drugs
         predP, pred_dictP = self.affinity_predictor(
-            smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
+            smiles_t_affinity, protein_predictor_tensor.repeat(len(valid_smiles), 1)
         )
         predP = np.squeeze(predP.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
         # Evaluate drugs
         predO, pred_dictO = self.efficacy_predictor(
-            smiles_t, gep_t.repeat(len(valid_smiles), 1)
+            smiles_t_efficacy, gep_t.repeat(len(valid_smiles), 1)
         )
         log_predsO = self.get_log_molar(np.squeeze(predO.detach().numpy()))
 
@@ -417,7 +423,7 @@ class ReinforceProteinOmics(Reinforce):
         """
         # Build up SMILES tensor and GEP tensor
         smiles_tensor = self.smiles_to_numerical(
-            valid_smiles, target='predictor'
+            valid_smiles, target='affinity'
         )
 
         # If all SMILES are invalid, no reward is given
@@ -451,17 +457,30 @@ class ReinforceProteinOmics(Reinforce):
             ).replace(':', '') for s in smiles_list
         ]
 
-        # Convert strings to numbers and padd length.
-        smiles_num = [
-            torch.unsqueeze(
-                self.smiles_to_tensor(
-                    self.pad_smiles_predictor(
-                        self.affinity_predictor.smiles_language.
-                        smiles_to_token_indexes(smiles)
-                    )
-                ), 0
-            ) for smiles in smiles_list
-        ]
+        if target == 'efficacy':
+            # Convert strings to numbers and padd length.
+            smiles_num = [
+                torch.unsqueeze(
+                    self.smiles_to_tensor(
+                        self.pad_efficacy_smiles_predictor(
+                            self.affinity_predictor.smiles_language.
+                            smiles_to_token_indexes(smiles)
+                        )
+                    ), 0
+                ) for smiles in smiles_list
+            ]
+        elif target == 'affinity':
+            # Convert strings to numbers and padd length.
+            smiles_num = [
+                torch.unsqueeze(
+                    self.smiles_to_tensor(
+                        self.pad_efficacy_smiles_predictor(
+                            self.affinity_predictor.smiles_language.
+                            smiles_to_token_indexes(smiles)
+                        )
+                    ), 0
+                ) for smiles in smiles_list
+            ]
 
         # Catch scenario where all SMILES are invalid
         if len(smiles_num) == 0:
@@ -483,7 +502,7 @@ class ReinforceProteinOmics(Reinforce):
         """
         # Build up SMILES tensor and GEP tensor
         smiles_tensor = self.smiles_to_numerical(
-            valid_smiles, target='predictor'
+            valid_smiles, target='efficacy'
         )
 
         # If all SMILES are invalid, no reward is given
