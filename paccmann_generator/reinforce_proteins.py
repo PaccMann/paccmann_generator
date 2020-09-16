@@ -130,8 +130,8 @@ class ReinforceProtein(Reinforce):
             encoding_tensor = torch.unsqueeze(
                 torch.Tensor(protein_encoding), 0
             )
-        t1 = sequence_tensor_p if encoder_uses_sequence else encoding_tensor
-        t2 = sequence_tensor_e if predictor_uses_sequence else encoding_tensor
+        t1 = sequence_tensor_e if encoder_uses_sequence else encoding_tensor
+        t2 = sequence_tensor_p if predictor_uses_sequence else encoding_tensor
         return t1, t2
 
     def generate_compounds_and_evaluate(
