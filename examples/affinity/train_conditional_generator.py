@@ -50,6 +50,21 @@ parser.add_argument(
     'unbiased_predictions_path', type=str,
     help='Path to folder with aff. preds for 3000 mols from unbiased generator'
 )
+parser.add_argument(
+    '--tox21_path', help='Optional path to Tox21 model.'
+)
+parser.add_argument(
+    '--organdb_path', help='Optional path to OrganDB model.'
+)
+parser.add_argument(
+    '--site', help='Specify a site in case of using a OrganDB model.'
+)
+parser.add_argument(
+    '--clintox_path', help='Optional path to ClinTox model.'
+)
+parser.add_argument(
+    '--sider_path', help='Optional path to SIDER model.'
+)
 
 args = parser.parse_args()
 
@@ -64,7 +79,7 @@ def main(*, parser_namespace):
     with open(parser_namespace.params_path) as f:
         params.update(json.load(f))
 
-    # get params
+    # get params, json args take precedence
     mol_model_path = params.get(
         'mol_model_path', parser_namespace.mol_model_path
     )
@@ -88,6 +103,15 @@ def main(*, parser_namespace):
     )   # yapf: disable
     model_name += '_' + str(test_id)
     logger.info(f'Model with name {model_name} starts.')
+
+    # passing optional paths to params to possibly update_reward_fn
+    optional_reward_args = [
+        'tox21_path', 'organdb_path', 'site', 'clintox_path', 'sider_path'
+    ]
+    for arg in optional_reward_args:
+        if parser_namespace.__dict__[arg]:
+            # json still has presedence
+            params[arg] = params.get(arg, parser_namespace.__dict__[arg])
 
     # Load protein sequence data
     if protein_data_path.endswith('.smi'):
