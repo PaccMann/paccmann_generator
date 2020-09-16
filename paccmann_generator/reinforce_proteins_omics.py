@@ -428,12 +428,48 @@ class ReinforceProteinOmics(Reinforce):
             protein, encoder_uses_sequence=False
         )
 
-        pred, pred_dict = self.predictor(
+        pred, pred_dict = self.affinity_predictor(
             smiles_tensor, protein_tensor.repeat(smiles_tensor.shape[0], 1)
         )
 
         return np.squeeze(pred.detach().numpy())
 
+    def smiles_to_numerical(self, smiles_list, target='predictor'):
+        """
+        Receives a list of SMILES.
+        Converts it to a numerical torch Tensor according to smiles_language
+        """
+
+        if target == 'generator':
+            # NOTE: Code for this in the normal REINFORCE class
+            raise ValueError('Priming drugs not yet supported')
+
+        # TODO: Workaround since predictor does not understand aromatic carbons
+        smiles_list = [
+            Chem.MolToSmiles(
+                Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+            ).replace(':', '') for s in smiles_list
+        ]
+
+        # Convert strings to numbers and padd length.
+        smiles_num = [
+            torch.unsqueeze(
+                self.smiles_to_tensor(
+                    self.pad_smiles_predictor(
+                        self.affinity_predictor.smiles_language.
+                        smiles_to_token_indexes(smiles)
+                    )
+                ), 0
+            ) for smiles in smiles_list
+        ]
+
+        # Catch scenario where all SMILES are invalid
+        if len(smiles_num) == 0:
+            return torch.Tensor()
+
+        smiles_tensor = torch.cat(smiles_num, dim=0)
+        return smiles_tensor
+    
     def get_reward_paccmann(self, valid_smiles, cell_line):
         """
         Get the reward from PaccMann
@@ -462,7 +498,7 @@ class ReinforceProteinOmics(Reinforce):
             ),
             0
         )
-        pred, pred_dict = self.predictor(
+        pred, pred_dict = self.efficacy_predictor(
             smiles_tensor, gep_t.repeat(len(valid_smiles), 1)
         )
         log_micromolar_pred = self.get_log_molar(
