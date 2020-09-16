@@ -15,7 +15,7 @@ from paccmann_chemistry.utils import get_device
 from paccmann_generator import ReinforceProtein
 from paccmann_generator.plot_utils import plot_and_compare_proteins, plot_loss
 from paccmann_generator.utils import disable_rdkit_logging
-from paccmann_predictor.models.predictors import MODEL_FACTORY
+from paccmann_predictor.models import MODEL_FACTORY
 from pytoda.files import read_smi
 from pytoda.proteins.protein_language import ProteinLanguage
 from pytoda.smiles.smiles_language import SMILESLanguage
