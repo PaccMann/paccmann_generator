@@ -463,7 +463,7 @@ class ReinforceProteinOmics(Reinforce):
                 torch.unsqueeze(
                     self.smiles_to_tensor(
                         self.pad_efficacy_smiles_predictor(
-                            self.affinity_predictor.smiles_language.
+                            self.efficacy_predictor.smiles_language.
                             smiles_to_token_indexes(smiles)
                         )
                     ), 0
@@ -474,7 +474,7 @@ class ReinforceProteinOmics(Reinforce):
             smiles_num = [
                 torch.unsqueeze(
                     self.smiles_to_tensor(
-                        self.pad_efficacy_smiles_predictor(
+                        self.pad_affinity_smiles_predictor(
                             self.affinity_predictor.smiles_language.
                             smiles_to_token_indexes(smiles)
                         )
