@@ -212,7 +212,7 @@ class Reinforce(object):
 
     def update_reward_fn(self, params):
         """ Set the reward function
-        
+
         Arguments:
             params (dict): Hyperparameter for PaccMann reward function
 

@@ -11,6 +11,5 @@
     "steps": 5,
     "batch_size": 128,
     "eval_batch_size": 200,
-    "tox21_weight": 0.5,
-    "tox21_path": "/Users/jab/Box/Molecular_SysBio/data/paccmann/paccmann_affinity/public/models/Tox21"
+    "tox21_weight": 0.5
 }
