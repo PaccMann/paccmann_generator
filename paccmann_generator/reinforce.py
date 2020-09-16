@@ -168,7 +168,7 @@ class Reinforce(object):
             torch.unsqueeze(
                 self.smiles_to_tensor(
                     self.pad_smiles_predictor(
-                        self.predictor.smiles_language.
+                        self.affinity_predictor.smiles_language.
                         smiles_to_token_indexes(smiles)
                     )
                 ), 0
