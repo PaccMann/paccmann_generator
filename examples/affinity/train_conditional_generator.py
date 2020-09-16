@@ -9,7 +9,7 @@ from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
 )
 from paccmann_chemistry.utils import get_device
-from paccmann_generator.reinforce_proteins import REINFORCE_proteins
+from paccmann_generator import ReinforceProtein
 from paccmann_generator.plot_utils import plot_and_compare_proteins, plot_loss
 from paccmann_omics.encoders import ENCODER_FACTORY
 from paccmann_affinity.models.predictors import MODEL_FACTORY
@@ -43,6 +43,13 @@ parser.add_argument(
 parser.add_argument(
     'model_name', type=str, help='Name for the trained model.'
 )
+parser.add_argument(
+    'test_protein_id', type=str, help='ID of testing protein (LOOCV).'
+)
+parser.add_argument(
+    'unbiased_predictions_path', type=str,
+    help='Path to folder with aff. preds for 3000 mols from unbiased generator'
+)
 
 args = parser.parse_args()
 
@@ -73,7 +80,13 @@ def main(*, parser_namespace):
     model_name = params.get(
         'model_name', parser_namespace.model_name
     )   # yapf: disable
-
+    test_id = int(params.get(
+        'test_protein_id', parser_namespace.test_protein_id
+    ))   # yapf: disable
+    unbiased_preds_path = params.get(
+        'unbiased_predictions_path', parser_namespace.unbiased_predictions_path
+    )   # yapf: disable
+    model_name += '_' + str(test_id)
     logger.info(f'Model with name {model_name} starts.')
 
     # Load protein sequence data
@@ -85,6 +98,9 @@ def main(*, parser_namespace):
         raise TypeError(
             f"{protein_data_path.split('.')[-1]} files are not supported."
         )
+
+    protein_test_name = protein_df.iloc[test_id].name
+    logger.info(f'Test protein is {protein_test_name}')
 
     # Restore SMILES Model
     with open(os.path.join(mol_model_path, 'model_params.json')) as f:
@@ -145,10 +161,11 @@ def main(*, parser_namespace):
     predictor._associate_language(affinity_protein_language)
 
     # Specifies the baseline model used for comparison
-    baseline = REINFORCE_proteins(
-        generator, protein_encoder, predictor, protein_df, {}, 'baseline',
-        logger
-    )
+    unbiased_preds = np.array(
+        pd.read_csv(
+            os.path.join(unbiased_preds_path, protein_test_name + '.csv')
+        )['affinity'].values
+    )  # yapf: disable
 
     # Create a fresh model that will be optimized
     gru_encoder_rl = StackGRUEncoder(mol_params)
@@ -174,19 +191,16 @@ def main(*, parser_namespace):
     )
     protein_encoder_rl.eval()
     model_folder_name = model_name
-    learner = REINFORCE_proteins(
+    learner = ReinforceProtein(
         generator_rl, protein_encoder_rl, predictor, protein_df, params,
         model_folder_name, logger
     )
 
-    # # Split the samples for conditional generation and initialize training
-    # train_omics, test_omics = omics_data_splitter(
-    #     omics_df, site, params.get('test_fraction', 0.2)
-    # )
+    biased_ratios, tox_ratios = [], []
     rewards, rl_losses = [], []
     gen_mols, gen_prot, gen_affinity, mode = [], [], [], []
 
-    print('Model stored at', learner.model_path)
+    logger.info(f'Model stored at {learner.model_path}')
 
     for epoch in range(1, params['epochs'] + 1):
 
@@ -194,12 +208,15 @@ def main(*, parser_namespace):
 
             # Randomly sample a protein
             protein_name = np.random.choice(protein_df.index)
-            print(f'Current train protein: {protein_name}')
+            while protein_name == protein_test_name:
+                protein_name = np.random.choice(protein_df.index)
+
+            logger.info(f'Current train protein: {protein_name}')
 
             rew, loss = learner.policy_gradient(
                 protein_name, epoch, params['batch_size']
             )
-            print(
+            logger.info(
                 f"Epoch {epoch:d}/{params['epochs']:d}, step {step:d}/"
                 f"{params['steps']:d}\t loss={loss:.2f}, mean rew={rew:.2f}"
             )
@@ -208,46 +225,52 @@ def main(*, parser_namespace):
             rl_losses.append(loss)
 
         # Save model
-        learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
-        print(f'EVAL protein: {protein_name}')
-        # Compare baseline and trained model on training protein
-        unbiased_smiles, unbiased_preds = (
-            baseline.generate_compounds_and_evaluate(
-                epoch, params['eval_batch_size'], protein_name
-            )
-        )
+        if epoch % 10 == 0:
+            learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
+        logger.info(f'EVAL protein: {protein_test_name}')
+
         smiles, preds = (
             learner.generate_compounds_and_evaluate(
-                epoch, params['eval_batch_size'], protein_name
+                epoch, params['eval_batch_size'], protein_test_name
             )
         )
         gs = [s for i, s in enumerate(smiles) if preds[i] > 0.5]
         gp = preds[preds > 0.5]
         for p, s in zip(gp, gs):
             gen_mols.append(s)
-            gen_prot.append(protein_name)
+            gen_prot.append(protein_test_name)
             gen_affinity.append(p)
-            mode.append('train')
+            mode.append('eval')
 
         inds = np.argsort(gp)[::-1]
         for i in inds[:5]:
             logger.info(
                 f'Epoch {epoch:d}, generated {gs[i]} against '
-                f'{protein_name}.\n Predicted IC50 = {gp[i]}. '
+                f'{protein_test_name}.\n Predicted IC50 = {gp[i]}. '
             )
 
         plot_and_compare_proteins(
-            unbiased_preds, preds, protein_name, epoch, learner.model_path,
-            'train', params['eval_batch_size']
+            unbiased_preds, preds, protein_test_name, epoch,
+            learner.model_path, 'train', params['eval_batch_size']
         )
+        biased_ratios.append(
+            np.round(100 * (np.sum(preds > 0.5) / len(preds)), 1)
+        )
+        all_toxes = np.array([learner.tox21(s) for s in smiles])
+        tox_ratios.append(
+            np.round(100 * (np.sum(all_toxes == 1.) / len(all_toxes)), 1)
+        )
+        logger.info(f'Percentage of non-toxic compounds {tox_ratios[-1]}')
 
+        toxes = [learner.tox21(s) for s in gen_mols]
         # Save results (good molecules!) in DF
         df = pd.DataFrame(
             {
                 'protein': gen_prot,
                 'SMILES': gen_mols,
                 'Binding probability': gen_affinity,
-                'mode': 'train'
+                'mode': mode,
+                'Tox21': toxes
             }
         )
         df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
@@ -264,6 +287,10 @@ def main(*, parser_namespace):
             learner.model_path,
             rolling=5
         )
+    pd.DataFrame({
+        'efficacy_ratio': biased_ratios,
+        'tox_ratio': tox_ratios
+    }).to_csv(learner.model_path + '/results/ratios.csv')
 
 
 if __name__ == '__main__':
