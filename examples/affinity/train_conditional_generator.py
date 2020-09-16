@@ -3,20 +3,23 @@ import json
 import logging
 import os
 import sys
+
 import numpy as np
 import pandas as pd
+from paccmann_omics.encoders import ENCODER_FACTORY
+
 from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
 )
 from paccmann_chemistry.utils import get_device
 from paccmann_generator import ReinforceProtein
 from paccmann_generator.plot_utils import plot_and_compare_proteins, plot_loss
-from paccmann_omics.encoders import ENCODER_FACTORY
-from paccmann_affinity.models.predictors import MODEL_FACTORY
-from pytoda.smiles.smiles_language import SMILESLanguage
-from pytoda.proteins.protein_language import ProteinLanguage
-from pytoda.files import read_smi
 from paccmann_generator.utils import disable_rdkit_logging
+from paccmann_predictor.models.predictors import MODEL_FACTORY
+from pytoda.files import read_smi
+from pytoda.proteins.protein_language import ProteinLanguage
+from pytoda.smiles.smiles_language import SMILESLanguage
+
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger('train_paccmann_rl')

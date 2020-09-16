@@ -5,6 +5,6 @@ torch>=1.0.1
 matplotlib>=2.2.2
 seaborn>=0.9.0
 six>=1.12.0
-paccmann_predictor @ git+https://git@github.com/PaccMann/paccmann_predictor@0.0.1
-paccmann_omics @ git+https://git@github.com/PaccMann/paccmann_omics@0.0.1
-paccmann_chemistry @ git+https://git@github.com/PaccMann/paccmann_chemistry@0.0.1
+paccmann_predictor @ git+https://git@github.com/PaccMann/paccmann_predictor@sarscov2
+paccmann_omics @ git+https://git@github.com/PaccMann/paccmann_omics@sarscov2
+paccmann_chemistry @ git+https://git@github.com/PaccMann/paccmann_chemistry@sarscov2
