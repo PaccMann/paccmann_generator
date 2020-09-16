@@ -1,7 +1,7 @@
 """Drug evaluator."""
 import json
 import os
-from cytotox.models import MODEL_FACTORY
+from toxsmi.models import MODEL_FACTORY
 
 from paccmann_predictor.utils.utils import get_device
 from pytoda.smiles.smiles_language import SMILESLanguage
@@ -35,7 +35,7 @@ class DrugEvaluator:
             model_path {String} -- Path to the model
         """
 
-        # Restore Tox21 model
+        # Restore model
         self.model_path = model_path
         with open(os.path.join(model_path, 'model_params.json')) as f:
             params = json.load(f)
