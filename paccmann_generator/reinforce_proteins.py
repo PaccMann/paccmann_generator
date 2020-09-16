@@ -1,13 +1,11 @@
 """PaccMann^RL: Protein-driven drug generation"""
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
 import torch.nn.functional as F
 
-from pytoda.transforms import LeftPadding, ToTensor
+from pytoda.transforms import LeftPadding, ToTensor, Compose
 
 from .reinforce import Reinforce
 
@@ -211,15 +209,17 @@ class ReinforceProtein(Reinforce):
         super().update_reward_fn(params)
         self.affinity_weight = params.get('affinity_weight', 1.)
 
-        tox_f = lambda x: 0
-        if self.tox21_weight > 0.:
-            tox_f = lambda s: tox_f(s) + self.tox21_weight * self.tox21(s)
-        if self.sider_weight > 0.:
-            tox_f = lambda s: tox_f(s) + self.sider_weight * self.sider(s)
-        if self.clintox_weight > 0.:
-            tox_f = lambda s: tox_f(s) + self.clintox_weight * self.clintox(s)
-        if self.organdb_weight > 0.:
-            tox_f = lambda s: tox_f(s) + self.organdb_weight * self.organdb(s)
+        def tox_f(s):
+            x = 0
+            if self.tox21_weight > 0.:
+                x += self.tox21_weight * self.tox21(s)
+            if self.sider_weight > 0.:
+                x += self.sider_weight * self.sider(s)
+            if self.clintox_weight > 0.:
+                x += self.clintox_weight * self.clintox(s)
+            if self.organdb_weight > 0.:
+                x += self.organdb_weight * self.organdb(s)
+            return x
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
