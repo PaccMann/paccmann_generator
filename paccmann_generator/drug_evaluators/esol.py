@@ -9,7 +9,7 @@ from .drug_evaluator import DrugEvaluator
 class ESOL(DrugEvaluator):
     """
     ESOL evaluation class.
-    Inherits from DrugEvaluator and estimates the solubility score of a 
+    Inherits from DrugEvaluator and estimates the solubility score of a
     molecule.
     """
 
@@ -34,7 +34,10 @@ class ESOL(DrugEvaluator):
         else:
             raise TypeError("Input must be from {str, rdkit.Chem.rdchem.Mol}")
 
-        return self.calc_esol(mol)
+        try:
+            return self.calc_esol(mol)
+        except Exception:
+            return 0.
 
     def calc_ap(self, mol):
         """
@@ -75,7 +78,7 @@ class ESOL(DrugEvaluator):
 
     def calc_esol(self, mol):
         """
-        Calculate ESOL based on descriptors in the Delaney paper, coefficients 
+        Calculate ESOL based on descriptors in the Delaney paper, coefficients
         refit for the RDKit using the routine refit_esol below.
         :param mol: input molecule
         :return: predicted solubility

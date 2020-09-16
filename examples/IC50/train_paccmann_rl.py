@@ -9,7 +9,7 @@ from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
 )
 from paccmann_chemistry.utils import get_device
-from paccmann_generator import REINFORCE
+from paccmann_generator import ReinforceOmic
 from paccmann_generator.plot_utils import plot_and_compare, plot_loss
 from paccmann_generator.utils import add_avg_profile, omics_data_splitter
 from paccmann_omics.encoders import ENCODER_FACTORY
@@ -34,9 +34,6 @@ parser.add_argument(
     'ic50_model_path', type=str, help='Path to pretrained ic50 model'
 )
 parser.add_argument(
-    'smiles_language_path', type=str, help='Path to SMILES language object'
-)
-parser.add_argument(
     'omics_data_path', type=str, help='Omics data path to condition generation'
 )
 parser.add_argument(
@@ -48,6 +45,7 @@ parser.add_argument(
 parser.add_argument(
     'site', type=str, help='Name of the cancer site for conditioning.'
 )
+
 
 args = parser.parse_args()
 
@@ -72,9 +70,6 @@ def main(*, parser_namespace):
     ic50_model_path = params.get(
         'ic50_model_path', parser_namespace.ic50_model_path
     )
-    smiles_language_path = params.get(
-        'smiles_language_path', parser_namespace.smiles_language_path
-    )
     omics_data_path = params.get(
         'omics_data_path', parser_namespace.omics_data_path
     )
@@ -85,10 +80,9 @@ def main(*, parser_namespace):
         'site', parser_namespace.site
     )   # yapf: disable
 
-    logger.info(f'Model with name {model_name} starts.')
+    params['site'] = site
 
-    # Load SMILES language
-    smiles_language = SMILESLanguage.load(smiles_language_path)
+    logger.info(f'Model with name {model_name} starts.')
 
     # Load omics profiles for conditional generation,
     # complement with avg per site
@@ -101,13 +95,18 @@ def main(*, parser_namespace):
     gru_encoder = StackGRUEncoder(mol_params)
     gru_decoder = StackGRUDecoder(mol_params)
     generator = TeacherVAE(gru_encoder, gru_decoder)
-    generator.load_model(
+    generator.load(
         os.path.join(
             mol_model_path,
             f"weights/best_{params.get('smiles_metric', 'rec')}.pt"
         ),
         map_location=get_device()
     )
+    # Load languages
+    generator_smiles_language = SMILESLanguage.load(
+        os.path.join(mol_model_path, 'selfies_language.pkl')
+    )
+    generator._associate_language(generator_smiles_language)
 
     # Restore omics model
     with open(os.path.join(omics_model_path, 'model_params.json')) as f:
@@ -127,19 +126,23 @@ def main(*, parser_namespace):
     # Restore PaccMann
     with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
         paccmann_params = json.load(f)
-    predictor = MODEL_FACTORY['mca'](paccmann_params)
-    predictor.load(
+    paccmann_predictor = MODEL_FACTORY['mca'](paccmann_params)
+    paccmann_predictor.load(
         os.path.join(
             ic50_model_path,
             f"weights/best_{params.get('ic50_metric', 'rmse')}_mca.pt"
         ),
         map_location=get_device()
     )
-    predictor.eval()
+    paccmann_predictor.eval()
+    paccmann_smiles_language = SMILESLanguage.load(
+        os.path.join(ic50_model_path, 'smiles_language.pkl')
+    )
+    paccmann_predictor._associate_language(paccmann_smiles_language)
 
     # Specifies the baseline model used for comparison
-    baseline = REINFORCE(
-        generator, cell_encoder, predictor, omics_df, smiles_language, {},
+    baseline = ReinforceOmic(
+        generator, cell_encoder, paccmann_predictor, omics_df, params,
         'baseline', logger
     )
 
@@ -147,13 +150,14 @@ def main(*, parser_namespace):
     gru_encoder_rl = StackGRUEncoder(mol_params)
     gru_decoder_rl = StackGRUDecoder(mol_params)
     generator_rl = TeacherVAE(gru_encoder_rl, gru_decoder_rl)
-    generator_rl.load_model(
+    generator_rl.load(
         os.path.join(
             mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
         ),
         map_location=get_device()
     )
     generator_rl.eval()
+    generator_rl._associate_language(generator_smiles_language)
 
     cell_encoder_rl = ENCODER_FACTORY['dense'](cell_params)
     cell_encoder_rl.load(
@@ -165,9 +169,9 @@ def main(*, parser_namespace):
     )
     cell_encoder_rl.eval()
     model_folder_name = site + '_' + model_name
-    learner = REINFORCE(
-        generator_rl, cell_encoder_rl, predictor, omics_df, smiles_language,
-        params, model_folder_name, logger
+    learner = ReinforceOmic(
+        generator_rl, cell_encoder_rl, paccmann_predictor, omics_df, params,
+        model_folder_name, logger
     )
 
     # Split the samples for conditional generation and initialize training
@@ -175,7 +179,8 @@ def main(*, parser_namespace):
         omics_df, site, params.get('test_fraction', 0.2)
     )
     rewards, rl_losses = [], []
-    gen_mols, gen_cell, gen_ic50, tt = [], [], [], []
+    gen_mols, gen_cell, gen_ic50, modes = [], [], [], []
+    logger.info('Models restored, start training.')
 
     for epoch in range(1, params['epochs'] + 1):
 
@@ -199,7 +204,7 @@ def main(*, parser_namespace):
         learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
 
         # Compare baseline and trained model on cell line
-        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
+        base_smiles, base_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], cell_line
         )
         smiles, preds = learner.generate_compounds_and_evaluate(
@@ -214,24 +219,24 @@ def main(*, parser_namespace):
             gen_mols.append(s)
             gen_cell.append(cell_line)
             gen_ic50.append(p)
-            tt.append('train')
+            modes.append('train')
 
         plot_and_compare(
-            unbiased_preds, preds, site, cell_line, epoch, learner.model_path,
+            base_preds, preds, site, cell_line, epoch, learner.model_path,
             'train', params['eval_batch_size']
         )
 
         # Evaluate on a validation cell line.
         eval_cell_line = np.random.choice(test_omics)
-        unbiased_smiles, unbiased_preds = baseline.generate_compounds_and_evaluate(
+        base_smiles, base_preds = baseline.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         smiles, preds = learner.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_cell_line
         )
         plot_and_compare(
-            unbiased_preds, preds, site, eval_cell_line, epoch,
-            learner.model_path, 'test', params['eval_batch_size']
+            base_preds, preds, site, eval_cell_line, epoch, learner.model_path,
+            'test', params['eval_batch_size']
         )
         gs = [
             s for i, s in enumerate(smiles)
@@ -242,7 +247,7 @@ def main(*, parser_namespace):
             gen_mols.append(s)
             gen_cell.append(eval_cell_line)
             gen_ic50.append(p)
-            tt.append('test')
+            modes.append('test')
 
         inds = np.argsort(preds)
         for i in inds[:5]:
@@ -257,7 +262,8 @@ def main(*, parser_namespace):
                 'cell_line': gen_cell,
                 'SMILES': gen_mols,
                 'IC50': gen_ic50,
-                'mode': tt
+                'mode': modes,
+                'tox21': [learner.tox21(s) for s in gen_mols]
             }
         )
         df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
