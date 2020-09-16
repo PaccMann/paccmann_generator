@@ -36,20 +36,20 @@ class DrugEvaluator:
         """
 
         # Restore Tox21 model
-        self.model_path = model_path
-        with open(os.path.join(model_path, 'model_params.json')) as f:
+        self.model_path = '/mnt/c/ClinToxMulti' #model_path
+        with open(os.path.join('/mnt/c/ClinToxMulti', 'model_params.json')) as f: #model_path, 'model_params.json')) as f:
             params = json.load(f)
 
         # Set up language and transforms
         self.smiles_language = SMILESLanguage.load(
-            os.path.join(model_path, 'smiles_language.pkl')
+            os.path.join('/mnt/c/ClinToxMulti', 'smiles_language.pkl')
         )
         self.transforms = self.compose_smiles_transforms(params)
 
         # Initialize and restore model weights
         self.model = MODEL_FACTORY['mca'](params)
         self.model.load(
-            os.path.join(model_path, 'weights', 'best_ROC-AUC_mca.pt'),
+            os.path.join('/mnt/c/ClinToxMulti', 'weights', 'best_ROC-AUC_mca.pt'),
             map_location=get_device()
         )
         self.model.eval()
