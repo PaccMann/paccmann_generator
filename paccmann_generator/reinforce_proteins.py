@@ -106,14 +106,21 @@ class ReinforceProtein(Reinforce):
 
         """
 
-        if encoder_uses_sequence or predictor_uses_sequence:
+        if predictor_uses_sequence:
             protein_sequence = self.protein_df.loc[protein]['Sequence']
-            # TODO: This may cause bugs if encoder_uses_sequence is True and
-            # uses another protein language object
-            sequence_tensor = torch.unsqueeze(
+            sequence_tensor_p = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
                         self.predictor.protein_language.
+                        sequence_to_token_indexes(protein_sequence)
+                    )
+                ), 0
+            )
+        if encoder_uses_sequence:
+            sequence_tensor_e = torch.unsqueeze(
+                self.protein_to_tensor(
+                    self.pad_protein_predictor(
+                        self.encoder.protein_language.
                         sequence_to_token_indexes(protein_sequence)
                     )
                 ), 0
@@ -125,8 +132,8 @@ class ReinforceProtein(Reinforce):
             encoding_tensor = torch.unsqueeze(
                 torch.Tensor(protein_encoding), 0
             )
-        t1 = sequence_tensor if encoder_uses_sequence else encoding_tensor
-        t2 = sequence_tensor if predictor_uses_sequence else encoding_tensor
+        t1 = sequence_tensor_p if encoder_uses_sequence else encoding_tensor
+        t2 = sequence_tensor_e if predictor_uses_sequence else encoding_tensor
         return t1, t2
 
     def generate_compounds_and_evaluate(
