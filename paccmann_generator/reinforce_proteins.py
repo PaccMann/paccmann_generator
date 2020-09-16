@@ -5,7 +5,7 @@ import seaborn as sns
 import torch
 import torch.nn.functional as F
 
-from pytoda.transforms import LeftPadding, ToTensor, Compose
+from pytoda.transforms import LeftPadding, ToTensor
 
 from .reinforce import Reinforce
 
@@ -21,7 +21,7 @@ class ReinforceProtein(Reinforce):
 
         Args:
             generator (nn.Module): SMILES generator object.
-            encoder (nn.Module): A gene expression encoder (DenseEncoder object)
+            encoder (nn.Module): A protein encoder.
             predictor (nn.Module): A binding affinity predictor
             protein_df (pd.Dataframe): Protein sequences of interest.
             params: dict with hyperparameter.
@@ -200,11 +200,8 @@ class ReinforceProtein(Reinforce):
 
     def update_reward_fn(self, params):
         """ Set the reward function
-        
         Arguments:
-            params {dict} -- Hyperparameter for PaccMann reward function
-
-
+            params (dict): Hyperparameter for PaccMann reward function
         """
         super().update_reward_fn(params)
         self.affinity_weight = params.get('affinity_weight', 1.)
@@ -233,11 +230,11 @@ class ReinforceProtein(Reinforce):
 
     def get_reward(self, valid_smiles, protein):
         """Get the reward
-        
+
         Arguments:
             valid_smiles (list): A list of valid SMILES strings.
             protein (str): Name of the target protein
-        
+
         Returns:
             np.array: computed reward.
         """
@@ -341,38 +338,3 @@ class ReinforceProtein(Reinforce):
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item()
-
-    def plot_hist(self, log_preds, cell_line, epoch, batch_size):
-        percentage = np.round(
-            100 * (np.sum(log_preds < 0) / len(log_preds)), 1
-        )
-        self.logger.info(f'Percentage of effective compounds = {percentage}')
-        _ = sns.kdeplot(log_preds, shade=True)
-        plt.axvline(x=0)
-        plt.xlabel('Predicted log(micromolar IC50)', weight='bold', size=12)
-        plt.ylabel(
-            f'Density of molecules (n={batch_size})', weight='bold', size=12
-        )
-        cl = cell_line.replace('_', '-')
-        plt.title(
-            f'Predicted IC50 for compounds generated against {cl}',
-            weight='bold'
-        )
-        valid = f'{round((len(log_preds)/batch_size)*100, 1)}% SMILES validity'
-
-        effect = f'{percentage}% compound efficacy.'
-        plt.text(
-            0.05, 0.9, valid, weight='bold', transform=plt.gca().transAxes
-        )
-        plt.text(
-            0.05, 0.8, effect, weight='bold', transform=plt.gca().transAxes
-        )
-        plt.xlim([-7.5, 7.5])
-
-        plt.savefig(
-            self.model_path +
-            f'/results/ic50_dist_ep_{epoch}_cell_{cell_line}.pdf',
-            dpi=400,
-            bbox_inches='tight'
-        )
-        plt.clf()
