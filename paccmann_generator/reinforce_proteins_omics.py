@@ -356,11 +356,10 @@ class ReinforceProteinOmics(Reinforce):
         )
         log_predsO = self.get_log_molar(np.squeeze(predO.detach().numpy()))
 
-        print(predP, predO, pred_dictP, pred_dictO, log_predsO)
         if return_latent:
-            return valid_smiles, pred, latent_z
+            return valid_smiles, predP, log_predsO, latent_z
         else:
-            return valid_smiles, pred
+            return valid_smiles, predP, log_predsO
 
     def update_reward_fn(self, params):
         """ Set the reward function
@@ -487,6 +486,9 @@ class ReinforceProteinOmics(Reinforce):
             return torch.Tensor()
 
         smiles_tensor = torch.cat(smiles_num, dim=0)
+        if target == 'efficacy':
+            smiles_tensor = smiles_tensor.narrow(1, len(smiles_tensor[0])-250, 250)
+
         return smiles_tensor
     
     def get_reward_paccmann(self, valid_smiles, cell_line):
