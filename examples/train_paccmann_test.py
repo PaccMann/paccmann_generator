@@ -9,7 +9,7 @@ from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
 )
 from paccmann_chemistry.utils import get_device
-from paccmann_generator.plot_utils import plot_and_compare, plot_loss
+from paccmann_generator.plot_utils import plot_and_compare, plot_and_compare_proteins, plot_loss
 from paccmann_generator.utils import add_avg_profile, omics_data_splitter
 from paccmann_omics.encoders import ENCODER_FACTORY
 from pytoda.smiles.smiles_language import SMILESLanguage
@@ -237,9 +237,9 @@ gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], []
 
 logger.info('Models restored, start training.')
 
-for epoch in range(1, params['epochs'] + 1):
+for epoch in range(1, 3):#params['epochs'] + 1):
 
-    for step in range(1, params['steps']):
+    for step in range(1, params['steps'] + 1):
 
         # Randomly sample a cell line:
         cell_line = np.random.choice(train_omics)
@@ -293,14 +293,51 @@ for epoch in range(1, params['epochs'] + 1):
         )
 
     plot_and_compare(
-        base_preds, predsO, site, cell_line, epoch, learner.model_path,
+        base_predsO, predsO, site, cell_line, epoch, learner.model_path,
         'train', params['eval_batch_size']
     )
     
-    plot_and_compare(
-        base_preds, predsP, protein_name, epoch, learner.model_path,
+    plot_and_compare_proteins(
+        base_predsP, predsP, protein_name, epoch, learner.model_path,
         'train', params['eval_batch_size']
     )
+
+    
+    # Evaluate on a validation cell line.
+    eval_cell_line = np.random.choice(test_omics)
+    base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
+        epoch, params['eval_batch_size'], protein_name, eval_cell_line
+    )
+    smiles, predsP, predsO = learner.generate_compounds_and_evaluate(
+        epoch, params['eval_batch_size'], protein_name, eval_cell_line
+    )
+    
+    plot_and_compare(
+        base_predsO, predsO, site, cell_line, epoch, learner.model_path,
+        'test', params['eval_batch_size']
+    )
+
+    gs = [
+        s for i, s in enumerate(smiles)
+        if predsO[i] < learner.ic50_threshold and predsP[i] > 0.5
+    ]
+    gp_o = predsO[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
+    gp_p = predsP[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
+
+    for p_o, p_p, s in zip(gp_o, gp_p, gs):
+        gen_mols.append(s)
+        gen_cell.append(cell_line)
+        gen_prot.append(protein_name)
+        gen_affinity.append(p_p)
+        gen_ic50.append(p_o)
+        modes.append('test')
+
+    inds = np.argsort(gp_o)[::-1]
+    for i in inds[:5]:
+        logger.info(
+            f'Epoch {epoch:d}, generated {gs[i]} against '
+            f'{eval_cell_line} and protein {protein_name}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
+        )
 
     # Save results (good molecules!) in DF
     df = pd.DataFrame(
