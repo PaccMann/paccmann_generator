@@ -106,6 +106,8 @@ class ReinforceProteinOmics(Reinforce):
         self.ic50_threshold = params.get('IC50_threshold', 0.0)
         # rewards for efficient and all other valid molecules
         self.rewards = params.get('rewards', (11, 1))
+        self.C_frac_weight = params.get('C_frac_weight', 0.2)
+        self.C_frac = params.get('C_frac', 0.8)
 
     def update_new_params(self, params):
         # parameter for reward function
@@ -404,10 +406,27 @@ class ReinforceProteinOmics(Reinforce):
                         #self.clintox_weight * self.clintox(s) +
                         #self.organdb_weight * self.organdb(s) for s in smiles
                         tox_f(s) for s in smiles
-                    ]
+                    ] -
+                    # minimize the difference of fraction of C to C_frac
+                    self.C_frac_weight *  np.abs(np.subtract([self.C_frac]*len(smiles), self.get_C_fraction(smiles)))
                 )
             )
         )
+
+    def get_C_fraction(self, smiles):
+        """get the fraction of C atoms in the molecule
+
+        Args:
+            smiles (list): A list of SMILES strings.
+
+        Returns:
+            list: a list of the fractions of C atmons per molecule.
+        """
+        tot = []
+        for s in smiles:
+            C = [1 for i in s if i=='C'].count(1)
+            tot.append(C/len(s))
+        return tot
 
     def get_reward(self, valid_smiles, protein, cell_line):
         """Get the reward
