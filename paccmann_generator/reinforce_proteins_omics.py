@@ -374,23 +374,36 @@ class ReinforceProteinOmics(Reinforce):
         self.affinity_weight = params.get('affinity_weight', 1.)
         self.tox21_weight = params.get('tox21_weight', .5)
 
+        
+        def tox_f(s):
+            x = 0
+            if self.tox21_weight > 0.:
+                x += self.tox21_weight * self.tox21(s)
+            if self.sider_weight > 0.:
+                x += self.sider_weight * self.sider(s)
+            if self.clintox_weight > 0.:
+                x += self.clintox_weight * self.clintox(s)
+            if self.organdb_weight > 0.:
+                x += self.organdb_weight * self.organdb(s)
+            return x
+
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
             lambda smiles, protein, cell: (
-                self.affinity_weight * self.
-                get_reward_affinity(smiles, protein) + np.
-                array([self.tox21_weight * self.tox21(s) for s in smiles]) +
+                self.affinity_weight * self.get_reward_affinity(smiles, protein) + 
+                np.array([tox_f(s) for s in smiles]) +
                 self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
                 np.array(
                     [
-                        self.qed_weight * self.qed(s) + self.scscore_weight *
-                        ((self.scscore(s) - 1) *
-                         (-1 / 4) + 1) + self.esol_weight *
-                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
-                        self.tox21_weight * self.tox21(s) + self.sider_weight *
-                        self.sider(s) + self.clintox_weight * self.clintox(s) +
-                        self.organdb_weight * self.organdb(s) for s in smiles
+                        self.qed_weight * self.qed(s) + 
+                        self.scscore_weight *((self.scscore(s) - 1) * (-1 / 4) + 1) + 
+                        self.esol_weight * (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
+                        #self.tox21_weight * self.tox21(s) + 
+                        #self.sider_weight * self.sider(s) + 
+                        #self.clintox_weight * self.clintox(s) +
+                        #self.organdb_weight * self.organdb(s) for s in smiles
+                        tox_f(s) for s in smiles
                     ]
                 )
             )
