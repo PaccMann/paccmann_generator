@@ -274,8 +274,8 @@ for epoch in range(1, params['epochs'] + 1):
         s for i, s in enumerate(smiles)
         if predsO[i] < learner.ic50_threshold and predsP[i] > 0.5
     ]
-    gp_o = predsO[predsO < learner.ic50_threshold and predsP[i] > 0.5]
-    gp_p = predsP[predsO < learner.ic50_threshold and predsP[i] > 0.5]
+    gp_o = predsO[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
+    gp_p = predsP[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
 
     for p_o, p_p, s in zip(gp_o, gp_p, gs):
         gen_mols.append(s)
