@@ -243,7 +243,7 @@ for epoch in range(1, params['epochs'] + 1):
 
         # Randomly sample a cell line:
         cell_line = np.random.choice(train_omics)
-        print(f'Current train cell_line: {eval_cell_line}')
+        print(f'Current train cell_line: {cell_line}')
         # Randomly sample a protein
         protein_name = np.random.choice(protein_df.index)
         print(f'Current train protein: {protein_name}')
