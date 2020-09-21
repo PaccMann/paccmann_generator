@@ -38,7 +38,7 @@ omics_data_path = 'data/gdsc_transcriptomics_for_conditional_generation.pkl'
 protein_data_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/tape/transformer/avg.csv'
 protein_data_seq_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/uniprot_sars_cov2.csv'
 params_path = 'examples/example_params.json'
-model_name = 'test'
+model_name = 'test_C_frac_higher_weight'
 site = 'lung'
 
 
@@ -237,7 +237,7 @@ gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], []
 
 logger.info('Models restored, start training.')
 
-for epoch in range(1, 3):#params['epochs'] + 1):
+for epoch in range(1, params['epochs'] + 1):
 
     for step in range(1, params['steps'] + 1):
 
