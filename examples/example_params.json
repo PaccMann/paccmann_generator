@@ -22,5 +22,7 @@
     "clintox_weight": 0,
     "organdb_weight": 0,
     "sider_weight": 0,
-    "tox21_weight": 0
+    "tox21_weight": 0,
+    "C_frac_weight": 1,
+    "C_frac": 0.7
 }
