@@ -374,8 +374,9 @@ class ReinforceProteinOmics(Reinforce):
         super().update_reward_fn(params)
         self.paccmann_weight = params.get('paccmann_weight', 1.)
         self.affinity_weight = params.get('affinity_weight', 1.)
-        self.tox21_weight = params.get('tox21_weight', .5)
-
+        self.C_frac_weight = params.get('C_frac_weight', .5)
+        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + 
+            self.qed_weight + self.scscore_weight + self. esol_weight + self.C_frac_weight
         
         def tox_f(s):
             x = 0
@@ -383,24 +384,27 @@ class ReinforceProteinOmics(Reinforce):
                 x += self.tox21_weight * self.tox21(s)
             if self.sider_weight > 0.:
                 x += self.sider_weight * self.sider(s)
+                self.weight_tot += self.sider_weight
             if self.clintox_weight > 0.:
                 x += self.clintox_weight * self.clintox(s)
+                self.weight_tot += self.clintox_weight
             if self.organdb_weight > 0.:
                 x += self.organdb_weight * self.organdb(s)
+                self.weight_tot += self.organdb_weight
             return x
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
             lambda smiles, protein, cell: (
-                self.affinity_weight * self.get_reward_affinity(smiles, protein) + 
+                self.affinity_weight / self.weight_tot * self.get_reward_affinity(smiles, protein) + 
                 np.array([tox_f(s) for s in smiles]) +
-                self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
+                self.paccmann_weight / self.weight_tot * self.get_reward_paccmann(smiles, cell) +
                 np.array(
                     [
-                        self.qed_weight * self.qed(s) + 
-                        self.scscore_weight *((self.scscore(s) - 1) * (-1 / 4) + 1) + 
-                        self.esol_weight * (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
+                        self.qed_weight / self.weight_tot * self.qed(s) + 
+                        self.scscore_weight / self.weight_tot *((self.scscore(s) - 1) * (-1 / 4) + 1) + 
+                        self.esol_weight / self.weight_tot * (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
                         #self.tox21_weight * self.tox21(s) + 
                         #self.sider_weight * self.sider(s) + 
                         #self.clintox_weight * self.clintox(s) +
@@ -408,7 +412,7 @@ class ReinforceProteinOmics(Reinforce):
                         tox_f(s) for s in smiles
                     ] -
                     # minimize the difference of fraction of C to C_frac
-                    self.C_frac_weight *  np.abs(np.subtract([self.C_frac]*len(smiles), self.get_C_fraction(smiles)))
+                    self.C_frac_weight / self.weight_tot *  np.abs(np.subtract([self.C_frac]*len(smiles), self.get_C_fraction(smiles)))
                 )
             )
         )
