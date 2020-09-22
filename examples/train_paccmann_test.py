@@ -30,15 +30,15 @@ logger_m.setLevel(logging.WARNING)
 
 language_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/trained_models/vae_selfies_one_hot_mod'
 mol_model_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/trained_models/vae_selfies_one_hot'
-omics_model_path = 'paccmann_generator/pvae'
+omics_model_path = 'pvae'
 protein_model_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/trained_models/pevae_avg'
-ic50_model_path = 'paccmann'
+ic50_model_path = '../paccmann_003'
 affinity_model_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/trained_models/base_affinity'
 omics_data_path = 'data/gdsc_transcriptomics_for_conditional_generation.pkl'
 protein_data_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/tape/transformer/avg.csv'
 protein_data_seq_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/uniprot_sars_cov2.csv'
 params_path = 'examples/example_params.json'
-model_name = 'test_C_frac_higher_weight'
+model_name = 'test_C_frac_0_5_new'
 site = 'lung'
 
 
@@ -147,7 +147,7 @@ paccmann_predictor = MODEL_FACTORY_OMICS['mca'](paccmann_params)
 paccmann_predictor.load(
     os.path.join(
         ic50_model_path,
-        f"weights/best_{params.get('ic50_metric', 'rmse')}_mca.pt"
+        f"weights/best_{params.get('ic50_metric', 'mse')}_mca.pt"
     ),
     map_location=get_device()
 )
