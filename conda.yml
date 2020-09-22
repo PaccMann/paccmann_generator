@@ -14,6 +14,6 @@ dependencies:
     - seaborn>=0.9.0
     - six>=1.12.0
     - toxsmi @ git+https://github.com/PaccMann/toxsmi@0.0.1
-    - paccmann_predictor @ git+https://github.com/PaccMann/paccmann_predictor@0.0.1
-    - paccmann_chemistry @ git+https://github.com/PaccMann/paccmann_chemistry@0.0.3
-    - paccmann_omics @ git+https://github.com/PaccMann/paccmann_omics@0.0.2
+    - paccmann_predictor @ git+https://github.com/PaccMann/paccmann_predictor@latest #0.0.1
+    - paccmann_chemistry @ git+https://github.com/PaccMann/paccmann_chemistry@latest #0.0.3
+    - paccmann_omics @ git+https://github.com/PaccMann/paccmann_omics@latest #0.0.2
