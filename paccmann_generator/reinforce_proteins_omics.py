@@ -375,8 +375,7 @@ class ReinforceProteinOmics(Reinforce):
         self.paccmann_weight = params.get('paccmann_weight', 1.)
         self.affinity_weight = params.get('affinity_weight', 1.)
         self.C_frac_weight = params.get('C_frac_weight', .5)
-        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + 
-            self.qed_weight + self.scscore_weight + self. esol_weight + self.C_frac_weight
+        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + self.qed_weight + self.scscore_weight + self. esol_weight + self.C_frac_weight
         
         def tox_f(s):
             x = 0
