@@ -69,6 +69,22 @@ def omics_data_splitter(omics_df, site, test_fraction):
 
     return train_cell_lines.tolist(), test_cell_lines.tolist()
 
+def protein_data_splitter(protein_df, test_fraction):
+    """
+    Split protein data into train and test.
+    Args:
+        protein_df    A pandas df of protein data for cancer genes
+        test_fraction  The fraction of proteins in test data
+
+    Returns:
+        train_df, test_df (tuple): A tuple of lists used for training and testing
+    """
+    msk = np.random.rand(len(protein_df)) < test_fraction
+    test_df = protein_df[~msk]
+    train_df = protein_df[msk]
+
+    return train_df, test_df
+
 
 def disable_rdkit_logging():
     """
