@@ -567,10 +567,13 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_mean(latent_z_omics, latent_z_protein)
+        return self.together_concat(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
-        return torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
+        return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
+
+    def together_concat(self, latent_z_omics, latent_z_protein):
+        return torch.cat((latent_z_protein, latent_z_omics),2)
 
     def policy_gradient(self, protein, cell_line, epoch, batch_size=10):
         """
