@@ -10,7 +10,7 @@ from paccmann_chemistry.models import (
 )
 from paccmann_chemistry.utils import get_device
 from paccmann_generator.plot_utils import plot_and_compare, plot_and_compare_proteins, plot_loss
-from paccmann_generator.utils import add_avg_profile, omics_data_splitter
+from paccmann_generator.utils import add_avg_profile, omics_data_splitter, protein_data_splitter
 from paccmann_omics.encoders import ENCODER_FACTORY
 from pytoda.smiles.smiles_language import SMILESLanguage
 from pytoda.proteins.protein_language import ProteinLanguage
@@ -38,7 +38,7 @@ omics_data_path = 'data/gdsc_transcriptomics_for_conditional_generation.pkl'
 protein_data_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/tape/transformer/avg.csv'
 protein_data_seq_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/uniprot_sars_cov2.csv'
 params_path = 'examples/example_params.json'
-model_name = 'test_C_frac_0_5_new'
+model_name = 'test_C_frac_0_5_new_2'
 site = 'lung'
 
 
@@ -232,6 +232,10 @@ learner = ReinforceProteinOmics(
 train_omics, test_omics = omics_data_splitter(
     omics_df, site, params.get('test_fraction', 0.2)
 )
+train_protein, test_protein = protein_data_splitter(
+    protein_df, params.get('test_fraction', 0.2)
+)
+
 rewards, rl_losses = [], []
 gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], [], []
 
@@ -245,7 +249,7 @@ for epoch in range(1, params['epochs'] + 1):
         cell_line = np.random.choice(train_omics)
         print(f'Current train cell_line: {cell_line}')
         # Randomly sample a protein
-        protein_name = np.random.choice(protein_df.index)
+        protein_name = np.random.choice(train_protein.index)
         print(f'Current train protein: {protein_name}')
 
         rew, loss = learner.policy_gradient(
@@ -303,18 +307,25 @@ for epoch in range(1, params['epochs'] + 1):
     )
 
     
-    # Evaluate on a validation cell line.
+    # Evaluate on a validation cell line and protein.
     eval_cell_line = np.random.choice(test_omics)
+    eval_protein_name = np.random.choice(test_protein.index)
+
     base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], protein_name, eval_cell_line
+        epoch, params['eval_batch_size'], eval_protein_name, eval_cell_line
     )
     smiles, predsP, predsO = learner.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], protein_name, eval_cell_line
+        epoch, params['eval_batch_size'], eval_protein_name, eval_cell_line
     )
     
     plot_and_compare(
-        base_predsO, predsO, site, cell_line, epoch, learner.model_path,
+        base_predsO, predsO, site, eval_cell_line, epoch, learner.model_path,
         'test', params['eval_batch_size']
+    )
+    
+    plot_and_compare_proteins(
+        base_predsP, predsP, eval_protein_name, epoch, learner.model_path,
+        'train', params['eval_batch_size']
     )
 
     gs = [
