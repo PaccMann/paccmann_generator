@@ -335,7 +335,7 @@ class ReinforceProteinOmics(Reinforce):
                 ), 0
             )
 
-        latent_z = torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
+        latent_z =self.together(latent_z_omics, latent_z_protein)
 
         # Generate drugs
         valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
@@ -566,6 +566,12 @@ class ReinforceProteinOmics(Reinforce):
         ]
         return 1 / (1 + np.exp(lmps))
 
+    def together(self, latent_z_omics, latent_z_protein):
+        return self.together_mean(latent_z_omics, latent_z_protein)
+
+    def together_mean(self, latent_z_omics, latent_z_protein):
+        return torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
+
     def policy_gradient(self, protein, cell_line, epoch, batch_size=10):
         """
         Implementation of the policy gradient algorithm.
@@ -588,7 +594,7 @@ class ReinforceProteinOmics(Reinforce):
         # Encode the cell line
         latent_z_omics = self.encode_cell_line(cell_line, batch_size)
 
-        latent_z = torch.mean(torch.cat((latent_z_protein,latent_z_omics),0),0)
+        latent_z = self.together(latent_z_omics, latent_z_protein)
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
