@@ -177,20 +177,37 @@ class ReinforceProteinOmics(Reinforce):
         """
         Encodes cell line in latent space with GEP encoder.
         """
-        gep_t = torch.unsqueeze(
-            torch.Tensor(
-                self.gep_df[
-                    self.gep_df['cell_line'] == cell_line  # yapf: disable
-                ].iloc[0].gene_expression.values
-            ),
-            0
-        )
-        cell_mu, cell_logvar = self.encoderOmics(gep_t)
+        cell_mu = []
+        cell_logvar = []
+        #gep_ts = []
+        for cell in cell_line:
+            gep_t = torch.unsqueeze(
+                torch.Tensor(
+                    self.gep_df[
+                        self.gep_df['cell_line'] == cell  # yapf: disable
+                    ].iloc[0].gene_expression.values
+                ),
+                0
+            )
+            #gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+            cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+            cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
+            cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
+        #gep_ts = torch.as_tensor(gep_ts)
+        cell_mu = torch.as_tensor(cell_mu)
+        cell_logvar = torch.as_tensor(cell_logvar)
 
+        cell_mu_batch = cell_mu.repeat(batch_size, 1)
+        cell_logvar = cell_logvar.repeat(batch_size, 1)
+        #gep_ts = gep_ts.repeat(batch_size, 1)
+        if cell_mu_batch.size()[0]>batch_size:
+            cell_mu_batch = cell_mu_batch[:batch_size]
+            cell_logvar = cell_logvar[:batch_size]
+            #gep_ts = gep_ts[:batch_size]
         latent_z = torch.unsqueeze(
             self.reparameterize(
-                cell_mu.repeat(batch_size, 1),
-                cell_logvar.repeat(batch_size, 1)
+                cell_mu_batch,
+                cell_logvar
             ), 0
         )
         return latent_z
@@ -205,16 +222,30 @@ class ReinforceProteinOmics(Reinforce):
         if protein is None:
             latent_z = torch.randn(1, batch_size, self.encoder.latent_size)
         else:
-
-            protein_tensor, _ = self.protein_to_numerical(
-                protein, encoder_uses_sequence=False
-            )
-            protein_mu, protein_logvar = self.encoder(protein_tensor)
+            protein_mu = []
+            protein_logvar = []
+            for prot in protein:
+                protein_encoder_tensor, _ = (
+                    self.protein_to_numerical(
+                        prot, encoder_uses_sequence=False, predictor_uses_sequence=True
+                    )
+                )
+                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
+                protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
+            protein_mu = torch.as_tensor(protein_mu)
+            protein_logvar = torch.as_tensor(protein_logvar)
+            
+            protein_mu_batch = protein_mu.repeat(batch_size, 1)
+            protein_logvar = protein_logvar.repeat(batch_size, 1)
+            if protein_mu_batch.size()[0]>batch_size:
+                protein_mu_batch = protein_mu_batch[:batch_size]
+                protein_logvar = protein_logvar[:batch_size]
 
             latent_z = torch.unsqueeze(
                 self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
+                    protein_mu_batch,
+                    protein_logvar
                 ), 0
             )
         return latent_z
@@ -300,16 +331,35 @@ class ReinforceProteinOmics(Reinforce):
             )
         else:
             #protein
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False, predictor_uses_sequence=True
+            protein_mu = []
+            protein_logvar = []
+            protein_predictor_tensor = []
+            for prot in protein:
+                protein_encoder_tensor, protein_predictor_tensor_i = (
+                    self.protein_to_numerical(
+                        prot, encoder_uses_sequence=False, predictor_uses_sequence=True
+                    )
                 )
-            )
-            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
+                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_predictor_tensor.append(torch.unsqueeze(protein_predictor_tensor_i, 0).detach().numpy()[0][0])
+                protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
+                protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
+            protein_mu = torch.as_tensor(protein_mu)
+            protein_logvar = torch.as_tensor(protein_logvar)
+            protein_predictor_tensor = torch.as_tensor(protein_predictor_tensor)
+            
+            protein_mu_batch = protein_mu.repeat(batch_size, 1)
+            protein_logvar = protein_logvar.repeat(batch_size, 1)
+            protein_predictor_tensor = protein_predictor_tensor.repeat(batch_size, 1)
+            if protein_mu_batch.size()[0]>batch_size:
+                protein_mu_batch = protein_mu_batch[:batch_size]
+                protein_logvar = protein_logvar[:batch_size]
+                protein_predictor_tensor = protein_predictor_tensor[:batch_size]
+            
             latent_z_protein = torch.unsqueeze(
                 self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
+                    protein_mu_batch,
+                    protein_logvar
                 ), 0
             )
         if cell_line is None:
@@ -319,26 +369,50 @@ class ReinforceProteinOmics(Reinforce):
             )
         else:
             #cell:
-            gep_t = torch.unsqueeze(
-                torch.Tensor(
-                    self.gep_df[
-                        self.gep_df['cell_line'] == cell_line  # yapf: disable
-                    ].iloc[0].gene_expression.values
-                ),
-                0
-            )
-            cell_mu, cell_logvar = self.encoderOmics(gep_t)
+            #print(cell_line)
+            #print(np.sum(self.gep_df['cell_line'].isin(cell_line)), "iloc0 \n", self.gep_df[self.gep_df['cell_line'].isin(cell_line)]['gene_expression'])
+            cell_mu = []
+            cell_logvar = []
+            gep_ts = []
+            for cell in cell_line:
+                gep_t = torch.unsqueeze(
+                    torch.Tensor(
+                        self.gep_df[
+                            self.gep_df['cell_line'] == cell  # yapf: disable
+                        ].iloc[0].gene_expression.values
+                    ),
+                    0
+                )
+                gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+                cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+                #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
+                cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
+                cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
+            gep_ts = torch.as_tensor(gep_ts)
+            cell_mu = torch.as_tensor(cell_mu)
+            cell_logvar = torch.as_tensor(cell_logvar)
+            #print("before", cell_mu.size())
+            #print(cell_mu)
+            cell_mu_batch = cell_mu.repeat(batch_size, 1)
+            cell_logvar = cell_logvar.repeat(batch_size, 1)
+            gep_ts = gep_ts.repeat(batch_size, 1)
+            if cell_mu_batch.size()[0]>batch_size:
+                cell_mu_batch = cell_mu_batch[:batch_size]
+                cell_logvar = cell_logvar[:batch_size]
+                gep_ts = gep_ts[:batch_size]
+            #print("second size:", cell_mu_batch.size(), cell_mu_batch)
+            #cell_mu, cell_logvar = self.encoderOmics(gep_t)
             latent_z_omics = torch.unsqueeze(
                 self.reparameterize(
-                    cell_mu.repeat(batch_size, 1),
-                    cell_logvar.repeat(batch_size, 1)
+                    cell_mu_batch,
+                    cell_logvar
                 ), 0
             )
-
+            
         latent_z =self.together(latent_z_omics, latent_z_protein)
 
         # Generate drugs
-        valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
             latent_z, remove_invalid=remove_invalid
         )
 
@@ -348,13 +422,13 @@ class ReinforceProteinOmics(Reinforce):
         # TODO: combine bowth predictors
         # Evaluate drugs
         predP, pred_dictP = self.affinity_predictor(
-            smiles_t_affinity, protein_predictor_tensor.repeat(len(valid_smiles), 1)
+            smiles_t_affinity, protein_predictor_tensor[valid_idx]
         )
         predP = np.squeeze(predP.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
         # Evaluate drugs
         predO, pred_dictO = self.efficacy_predictor(
-            smiles_t_efficacy, gep_t.repeat(len(valid_smiles), 1)
+            smiles_t_efficacy, gep_ts[valid_idx]
         )
         log_predsO = self.get_log_molar(np.squeeze(predO.detach().numpy()))
 
@@ -395,10 +469,10 @@ class ReinforceProteinOmics(Reinforce):
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
-            lambda smiles, protein, cell: (
-                self.affinity_weight / self.weight_tot * self.get_reward_affinity(smiles, protein) + 
+            lambda smiles, protein, cell, idx, batch_size: (
+                self.affinity_weight / self.weight_tot * self.get_reward_affinity(smiles, protein, idx, batch_size) + 
                 np.array([tox_f(s) for s in smiles]) +
-                self.paccmann_weight / self.weight_tot * self.get_reward_paccmann(smiles, cell) +
+                self.paccmann_weight / self.weight_tot * self.get_reward_paccmann(smiles, cell, idx, batch_size) +
                 np.array(
                     [
                         self.qed_weight / self.weight_tot * self.qed(s) + 
@@ -431,7 +505,7 @@ class ReinforceProteinOmics(Reinforce):
             tot.append(C/len(s))
         return tot
 
-    def get_reward(self, valid_smiles, protein, cell_line):
+    def get_reward(self, valid_smiles, protein, cell_line, idx, batch_size):
         """Get the reward
         
         Arguments:
@@ -442,9 +516,9 @@ class ReinforceProteinOmics(Reinforce):
         Returns:
             np.array: computed reward.
         """
-        return self.reward_fn(valid_smiles, protein, cell_line)
+        return self.reward_fn(valid_smiles, protein, cell_line, idx, batch_size)
 
-    def get_reward_affinity(self, valid_smiles, protein):
+    def get_reward_affinity(self, valid_smiles, protein, idx, batch_size):
         """
         Get the reward from affinity predictor
 
@@ -458,18 +532,23 @@ class ReinforceProteinOmics(Reinforce):
         # Build up SMILES tensor and GEP tensor
         smiles_tensor = self.smiles_to_numerical(
             valid_smiles, target='affinity'
-        )
-
+        ) 
         # If all SMILES are invalid, no reward is given
         if len(smiles_tensor) == 0:
             return 0
-
-        _, protein_tensor = self.protein_to_numerical(
-            protein, encoder_uses_sequence=False
-        )
-
+        
+        protein_tensor = []
+        for prot in protein:
+            _, protein_tensor_i = self.protein_to_numerical(
+                prot, encoder_uses_sequence=False
+            )
+            protein_tensor.append(torch.unsqueeze(protein_tensor_i, 0).detach().numpy()[0][0])
+        protein_tensor = torch.as_tensor(protein_tensor)
+        protein_tensor = protein_tensor.repeat(batch_size, 1)
+        if protein_tensor.size()[0]>batch_size:
+            protein_tensor = protein_tensor[:batch_size]
         pred, pred_dict = self.affinity_predictor(
-            smiles_tensor, protein_tensor.repeat(smiles_tensor.shape[0], 1)
+            smiles_tensor, protein_tensor[idx]
         )
 
         return np.squeeze(pred.detach().numpy())
@@ -526,7 +605,7 @@ class ReinforceProteinOmics(Reinforce):
 
         return smiles_tensor
     
-    def get_reward_paccmann(self, valid_smiles, cell_line):
+    def get_reward_paccmann(self, valid_smiles, cell_line, idx, batch_size):
         """
         Get the reward from PaccMann
 
@@ -546,16 +625,24 @@ class ReinforceProteinOmics(Reinforce):
         if len(smiles_tensor) == 0:
             return 0
 
-        gep_t = torch.unsqueeze(
-            torch.Tensor(
-                self.gep_df[
-                    self.gep_df['cell_line'] == cell_line  # yapf: disable
-                ].iloc[0].gene_expression.values
-            ),
-            0
-        )
+        gep_ts = []
+        for cell in cell_line:
+            gep_t = torch.unsqueeze(
+                torch.Tensor(
+                    self.gep_df[
+                        self.gep_df['cell_line'] == cell  # yapf: disable
+                    ].iloc[0].gene_expression.values
+                ),
+                0
+            )
+            gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+        gep_ts = torch.as_tensor(gep_ts)
+        gep_ts = gep_ts.repeat(batch_size, 1)
+        if gep_ts.size()[0]>batch_size:
+            gep_ts = gep_ts[:batch_size]
+
         pred, pred_dict = self.efficacy_predictor(
-            smiles_tensor, gep_t.repeat(len(valid_smiles), 1)
+            smiles_tensor, gep_ts[idx]
         )
         log_micromolar_pred = self.get_log_molar(
             np.squeeze(pred.detach().numpy())
@@ -605,7 +692,7 @@ class ReinforceProteinOmics(Reinforce):
         )
 
         # Get rewards (list, one reward for each valid smiles)
-        rewards = self.get_reward(valid_smiles, protein, cell_line)
+        rewards = self.get_reward(valid_smiles, protein, cell_line, valid_idx, batch_size)
         reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
