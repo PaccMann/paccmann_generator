@@ -38,7 +38,7 @@ omics_data_path = 'data/gdsc_transcriptomics_for_conditional_generation.pkl'
 protein_data_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/tape/transformer/avg.csv'
 protein_data_seq_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/uniprot_sars_cov2.csv'
 params_path = 'examples/example_params.json'
-model_name = 'test_C_frac_0_5_new_2'
+model_name = 'test_C_frac_0_5_new_test'
 site = 'lung'
 
 
@@ -241,15 +241,19 @@ gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], []
 
 logger.info('Models restored, start training.')
 
+# choose a validation cell line and protein.
+eval_cell_lines = np.random.choice(test_omics, size = 20, replace=False)
+eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=False)
+
 for epoch in range(1, params['epochs'] + 1):
 
     for step in range(1, params['steps'] + 1):
 
         # Randomly sample a cell line:
-        cell_line = np.random.choice(train_omics)
+        cell_line = [np.random.choice(train_omics)]
         print(f'Current train cell_line: {cell_line}')
         # Randomly sample a protein
-        protein_name = np.random.choice(train_protein.index)
+        protein_name = [np.random.choice(train_protein.index)]
         print(f'Current train protein: {protein_name}')
 
         rew, loss = learner.policy_gradient(
@@ -265,9 +269,7 @@ for epoch in range(1, params['epochs'] + 1):
 
     # Save model
     learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
-    print(f'EVAL protein: {protein_name}')
 
-    # Compare baseline and trained model on cell line
     base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], protein_name, cell_line
     )
@@ -308,23 +310,21 @@ for epoch in range(1, params['epochs'] + 1):
 
     
     # Evaluate on a validation cell line and protein.
-    eval_cell_line = np.random.choice(test_omics)
-    eval_protein_name = np.random.choice(test_protein.index)
-
     base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], eval_protein_name, eval_cell_line
+        epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     )
     smiles, predsP, predsO = learner.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], eval_protein_name, eval_cell_line
+        epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     )
+    1/0
     
     plot_and_compare(
-        base_predsO, predsO, site, eval_cell_line, epoch, learner.model_path,
+        base_predsO, predsO, site, eval_cell_lines, epoch, learner.model_path,
         'test', params['eval_batch_size']
     )
     
     plot_and_compare_proteins(
-        base_predsP, predsP, eval_protein_name, epoch, learner.model_path,
+        base_predsP, predsP, eval_protein_names, epoch, learner.model_path,
         'train', params['eval_batch_size']
     )
 
@@ -347,7 +347,7 @@ for epoch in range(1, params['epochs'] + 1):
     for i in inds[:5]:
         logger.info(
             f'Epoch {epoch:d}, generated {gs[i]} against '
-            f'{eval_cell_line} and protein {protein_name}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
+            f'{eval_cell_lines} and protein {protein_name}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
         )
 
     # Save results (good molecules!) in DF
