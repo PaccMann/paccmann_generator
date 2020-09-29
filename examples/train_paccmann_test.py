@@ -316,7 +316,6 @@ for epoch in range(1, params['epochs'] + 1):
     smiles, predsP, predsO = learner.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     )
-    1/0
     
     plot_and_compare(
         base_predsO, predsO, site, eval_cell_lines, epoch, learner.model_path,
