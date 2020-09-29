@@ -49,10 +49,10 @@ def plot_and_compare(
     plt.xlabel('Predicted log(micromolar IC50)')
     plt.ylabel(f'Density of generated molecules (n={bs})')
     t1 = 'PaccMann$^{\mathrm{RL}}$ '
-    s = site.replace('_', ' ')
-    c = cell_line.replace('_', ' ')
-    t2 = f'generator for {s} cancer. (cell: {c})'
-    plt.title(t1 + t2, size=13)
+    #s = site.replace('_', ' ')
+    #c = cell_line.replace('_', ' ')
+    #t2 = f'generator for {s} cancer. (cell: {c})'
+    #plt.title(t1 + t2, size=13)
     plt.text(0.67, 0.70, valid, weight='bold', transform=plt.gca().transAxes)
     plt.text(
         0.05,
