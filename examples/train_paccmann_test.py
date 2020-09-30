@@ -22,6 +22,7 @@ from paccmann_affinity.models.predictors import MODEL_FACTORY as MODEL_FACTORY_P
 
 from paccmann_generator.reinforce_proteins_omics import ReinforceProteinOmics
 from paccmann_generator import ReinforceOmic
+from paccmann_generator.reinforce_proteins import REINFORCE_proteins
 
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -225,13 +226,19 @@ protein_encoder_rl.load(
 protein_encoder_rl.eval()
 
 model_folder_name = site + '_' + model_name
-learner = ReinforceProteinOmics(
+learner_combined = ReinforceProteinOmics(
     generator_rl, protein_encoder_rl,cell_encoder_rl, \
     protein_predictor, paccmann_predictor, protein_df, omics_df, \
     params, generator_smiles_language, model_folder_name, logger
 )
-
-
+learner_protein = REINFORCE_proteins(
+    generator_rl, protein_encoder_rl, predictor, protein_df, params,
+    model_folder_name, logger
+)
+learner_omics = ReinforceOmic(
+    generator_rl, cell_encoder_rl, paccmann_predictor, omics_df, params,
+    model_folder_name, logger
+)
 
 # Split the samples for conditional generation and initialize training
 train_omics, test_omics = omics_data_splitter(
@@ -241,8 +248,10 @@ train_protein, test_protein = protein_data_splitter(
     protein_df, params.get('test_fraction', 0.2)
 )
 
-rewards, rl_losses = [], []
+rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
 gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], [], []
+gen_mols_o ,gen_cell, gen_ic50, modes_o = [], [], [], []
+gen_mols_p ,gen_prot_p, gen_affinity_p, modes_p = [], [], [], []
 
 logger.info('Models restored, start training.')
 
@@ -261,8 +270,14 @@ for epoch in range(1, params['epochs'] + 1):
         protein_name = [np.random.choice(train_protein.index)]
         print(f'Current train protein: {protein_name}')
 
-        rew, loss = learner.policy_gradient(
+        rew, loss = learner_combined.policy_gradient(
             protein_name, cell_line, epoch, params['batch_size']
+        )
+        rew_p, loss_p = learner_protein.policy_gradient(
+            protein_name, epoch, params['batch_size']
+        )
+        rew_o, loss_o = learner_omics.policy_gradient(
+            cell_line, epoch, params['batch_size']
         )
         print(
             f"Epoch {epoch:d}/{params['epochs']:d}, step {step:d}/"
@@ -271,22 +286,36 @@ for epoch in range(1, params['epochs'] + 1):
 
         rewards.append(rew.item())
         rl_losses.append(loss)
+        rewards_p.append(rew_p.item())
+        losses_p.append(loss_p)
+        rewards_o.append(rew_o.item())
+        losses_o.append(loss_o)
 
     # Save model
-    learner.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
+    learner_combined.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
+    learner_omics.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
+    learner_protein.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
 
     base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], protein_name, cell_line
     )
-    smiles, predsP, predsO = learner.generate_compounds_and_evaluate(
+    smiles_o, preds_o = learner_omics.generate_compounds_and_evaluate(
+        epoch, params['eval_batch_size'], cell_line
+    )
+    smiles, predsP, predsO = learner_combined.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], protein_name, cell_line
+    )
+    smiles_p, preds_p = (
+        learner_protein.generate_compounds_and_evaluate(
+            epoch, params['eval_batch_size'], protein_name
+        )
     )
     gs = [
         s for i, s in enumerate(smiles)
-        if predsO[i] < learner.ic50_threshold and predsP[i] > 0.5
+        if predsO[i] < learner_combined.ic50_threshold and predsP[i] > 0.5
     ]
-    gp_o = predsO[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
-    gp_p = predsP[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
+    gp_o = predsO[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
+    gp_p = predsP[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
 
     for p_o, p_p, s in zip(gp_o, gp_p, gs):
         gen_mols.append(s)
@@ -304,32 +333,77 @@ for epoch in range(1, params['epochs'] + 1):
         )
 
     plot_and_compare(
-        base_predsO, predsO, site, cell_line, epoch, learner.model_path,
-        'train', params['eval_batch_size']
+        base_predsO, predsO, site, cell_line, epoch, learner_combined.model_path,
+        'train_combined', params['eval_batch_size']
+    )
+    plot_and_compare_proteins(
+        base_predsP, predsP, protein_name, epoch, learner_combined.model_path,
+        'train_combined', params['eval_batch_size']
     )
     
-    plot_and_compare_proteins(
-        base_predsP, predsP, protein_name, epoch, learner.model_path,
-        'train', params['eval_batch_size']
+    gs_omics = [
+        s for i, s in enumerate(smiles)
+        if preds_o[i] < learner_omics.ic50_threshold
+    ]
+    gp_omics = preds_o[preds_o < learner_omics.ic50_threshold]
+    for p, s in zip(gp_omics, gs_omics):
+        gen_mols_o.append(s)
+        gen_cell_o.append(cell_line)
+        gen_ic50_o.append(p)
+        modes_o.append('train')
+
+    plot_and_compare(
+        base_predsO, preds_o, site, cell_line, epoch, learner_omics.model_path,
+        'train_omics', params['eval_batch_size']
     )
 
+    gs_protein = [s for i, s in enumerate(smiles) if preds_p[i] > 0.5]
+    gp_protein = preds_p[preds_p > 0.5]
+    for p, s in zip(gp_protein, gs_protein):
+        gen_mols_p.append(s)
+        gen_prot_p.append(protein_name)
+        gen_affinity_p.append(p)
+        modes_p.append('train')
+
+    plot_and_compare_proteins(
+            base_predsP, preds_p, protein_name, epoch, learner_protein.model_path,
+            'train_protein', params['eval_batch_size']
+        )
     
     # Evaluate on a validation cell line and protein.
     base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     )
-    smiles, predsP, predsO = learner.generate_compounds_and_evaluate(
+    smiles_o, preds_o = learner_omics.generate_compounds_and_evaluate(
+        epoch, params['eval_batch_size'], eval_cell_lines
+    )
+    smiles, predsP, predsO = learner_combined.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
+    )
+    smiles_p, preds_p = (
+        learner_protein.generate_compounds_and_evaluate(
+            epoch, params['eval_batch_size'], eval_protein_names
+        )
     )
     
     plot_and_compare(
-        base_predsO, predsO, site, eval_cell_lines, epoch, learner.model_path,
-        'test', params['eval_batch_size']
+        base_predsO, predsO, site, eval_cell_lines, epoch, learner_combined.model_path,
+        'test_combined', params['eval_batch_size']
     )
     
     plot_and_compare_proteins(
-        base_predsP, predsP, eval_protein_names, epoch, learner.model_path,
-        'train', params['eval_batch_size']
+        base_predsP, predsP, eval_protein_names, epoch, learner_combined.model_path,
+        'test_combined', params['eval_batch_size']
+    )
+
+    plot_and_compare(
+        base_predsO, preds_o, site, eval_cell_lines, epoch, learner_omics.model_path,
+        'test_omics', params['eval_batch_size']
+    )
+    
+    plot_and_compare_proteins(
+        base_predsP, preds_p, eval_protein_names, epoch, learner_protein.model_path,
+        'test_protein', params['eval_batch_size']
     )
 
     gs = [
@@ -347,6 +421,25 @@ for epoch in range(1, params['epochs'] + 1):
         gen_ic50.append(p_o)
         modes.append('test')
 
+    gs_omics = [
+        s for i, s in enumerate(smiles)
+        if preds_o[i] < learner_omics.ic50_threshold
+    ]
+    gp_omics = preds_o[preds_o < learner_omics.ic50_threshold]
+    for p, s in zip(gp_omics, gs_omics):
+        gen_mols_o.append(s)
+        gen_cell_o.append(cell_line)
+        gen_ic50_o.append(p)
+        modes_o.append('train')
+
+    gs_protein = [s for i, s in enumerate(smiles) if preds_p[i] > 0.5]
+    gp_protein = preds_p[preds_p > 0.5]
+    for p, s in zip(gp_protein, gs_protein):
+        gen_mols_p.append(s)
+        gen_prot_p.append(protein_name)
+        gen_affinity_p.append(p)
+        modes_p.append('train')
+    
     inds = np.argsort(gp_o)[::-1]
     for i in inds[:5]:
         logger.info(
@@ -363,21 +456,69 @@ for epoch in range(1, params['epochs'] + 1):
             'IC50': gen_ic50,
             'Binding probability': gen_affinity,
             'mode': modes,
-            'tox21': [learner.tox21(s) for s in gen_mols]
+            'tox21': [learner_combined.tox21(s) for s in gen_mols]
         }
     )
-    df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
+    df.to_csv(os.path.join(learner_combined.model_path, 'results', 'generated.csv'))
     # Plot loss development
     loss_df = pd.DataFrame({'loss': rl_losses, 'rewards': rewards})
     loss_df.to_csv(
-        learner.model_path + '/results/loss_reward_evolution.csv'
+        learner_combined.model_path + '/results/loss_reward_evolution.csv'
     )
     plot_loss(
         rl_losses,
         rewards,
         params['epochs'],
         #cell_line + ',' + protein_name,
-        learner.model_path,
+        learner_combined.model_path,
         rolling=5,
         site=site
+    )
+
+    df = pd.DataFrame(
+        {
+            'cell_line': gen_cell_o,
+            'SMILES': gen_mols_o,
+            'IC50': gen_ic50_o,
+            'mode': modes_o,
+            'tox21': [learner_omics.tox21(s) for s in gen_mols_o]
+        }
+    )
+    df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
+    # Plot loss development
+    loss_df = pd.DataFrame({'loss': losses_o, 'rewards': rewards_o})
+    loss_df.to_csv(
+        learner_omics.model_path + '/results/loss_reward_evolution.csv'
+    )
+    plot_loss(
+        losses_o,
+        rewards_o,
+        params['epochs'],
+        #cell_line,
+        learner_omics.model_path,
+        rolling=5,
+        site=site
+    )
+
+    df = pd.DataFrame(
+        {
+            'protein': gen_prot_p,
+            'SMILES': gen_mols_p,
+            'Binding probability': gen_affinity_p,
+            'mode': modes_p
+        }
+    )
+    df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'))
+    # Plot loss development
+    loss_df = pd.DataFrame({'loss': losses_p, 'rewards': rewards_p})
+    loss_df.to_csv(
+        learner_protein.model_path + '/results/loss_reward_evolution.csv'
+    )
+    plot_loss(
+        losses_p,
+        rewards_p,
+        params['epochs'],
+        #protein_name,
+        learner_protein.model_path,
+        rolling=5
     )
