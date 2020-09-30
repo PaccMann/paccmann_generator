@@ -52,7 +52,7 @@ def plot_and_compare(
     #s = site.replace('_', ' ')
     #c = cell_line.replace('_', ' ')
     #t2 = f'generator for {s} cancer. (cell: {c})'
-    #plt.title(t1 + t2, size=13)
+    plt.title(t1 , size=13) #+ t2
     plt.text(0.67, 0.70, valid, weight='bold', transform=plt.gca().transAxes)
     plt.text(
         0.05,
@@ -67,7 +67,7 @@ def plot_and_compare(
     plt.savefig(
         os.path.join(
             save_path,
-            f'results/{mode}_{cell_line}_epoch_{epoch}_eff_{biased_ratio}.pdf'
+            f'results/{mode}_epoch_{epoch}_eff_{biased_ratio}.pdf'
         )
     )
     plt.clf()
@@ -135,8 +135,8 @@ def plot_and_compare_proteins(
     # organism = protein.split('=')[-1]
     # t2 = f'generator for: {protein_name}\n({organism})'
     protein_name = protein
-    t2 = f'generator for: {protein_name}\n'
-    plt.title(t1 + t2, size=10)
+    #t2 = f'generator for: {protein_name}\n'
+    plt.title(t1, size=10) # + t2
     plt.text(
         0.55,
         0.95,
@@ -150,14 +150,14 @@ def plot_and_compare_proteins(
     plt.savefig(
         os.path.join(
             save_path,
-            f'results/{mode}_{protein}_epoch_{epoch}_aff_{biased_ratio}.pdf'
+            f'results/{mode}_epoch_{epoch}_aff_{biased_ratio}.pdf'
         )
     )
     plt.clf()
 
 
 def plot_loss(
-    loss, reward, epoch, cell_line, save_path, rolling=1, site='unknown'
+    loss, reward, epoch, save_path, rolling=1, site='unknown'
 ):
     loss = pd.Series(loss).rolling(rolling).mean()
     rewards = pd.Series(reward).rolling(rolling).mean()
@@ -168,11 +168,11 @@ def plot_loss(
     # Plot KLD on second y axis
     _ = plt.twinx()
     s = site.replace('_', ' ')
-    _ = cell_line.replace('_', ' ')
+    #_ = cell_line.replace('_', ' ')
     plt.plot(np.arange(len(rewards)), rewards, color='g')
     plt.ylabel('Achieved rewards', size=12).set_color('g')
     plt.title('PaccMann$^{\mathrm{RL}}$ generator for ' + s + ' cancer')
     plt.savefig(
-        os.path.join(save_path, f'results/loss_ep_{epoch}_cell_{cell_line}')
+        os.path.join(save_path, f'results/loss_ep_{epoch}')
     )
     plt.clf()
