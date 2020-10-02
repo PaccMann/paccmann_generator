@@ -5,6 +5,8 @@ import os
 import sys
 import numpy as np
 import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
 from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
 )
@@ -22,7 +24,7 @@ from paccmann_affinity.models.predictors import MODEL_FACTORY as MODEL_FACTORY_P
 
 from paccmann_generator.reinforce_proteins_omics import ReinforceProteinOmics
 from paccmann_generator import ReinforceOmic
-from paccmann_generator.reinforce_proteins import REINFORCE_proteins
+from paccmann_generator.reinforce_proteins import ReinforceProtein
 
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -38,10 +40,11 @@ ic50_model_path = '../paccmann_003'
 affinity_model_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/trained_models/base_affinity'
 omics_data_path = 'data/gdsc_transcriptomics_for_conditional_generation.pkl'
 protein_data_path = '/mnt/c/Users/PatriciaStoll/Documents/data/embedding.csv'#paccmann_affinity/sars_cov2_data/tape/transformer/avg.csv'
-protein_data_seq_path = '/mnt/c/Users/PatriciaStoll/Documents/data/uniprot-yourlist M20200922A94466D2655679D1FD8953E075198DA87EBCA61-filtered-rev--.fasta'
+protein_data_seq_path = 'output.csv'
+#protein_data_seq_path = '/mnt/c/Users/PatriciaStoll/paccmann_affinity/sars_cov2_data/uniprot_sars_cov2.csv'
 params_path = 'examples/example_params.json'
-model_name = 'multitest'
-site = 'lung'
+model_name = 'neuroblastoma_test1'
+site = 'all'
 cancertype = 'neuroblastoma'
 cancer_genes = ['RUNX1','CSF1R','MPO','CSF2','IL3','RUNX1T1','HDAC1','HDAC2','SIN3A','NCOR1','CEBPA','PER2','SPI1','CD14','ITGAM','FCGR1A','JUP','PML','RARA','CCNA2','CCNA1','CEBPE','BCL2A1','ZBTB16','MYC','DUSP6','TCF3','PBX1','WNT16','ETV6','ETV7','DEFA1','DEFA3','DEFA4','DEFA5','DEFA6','DEFA1B','ELANE','GZMB','KMT2A','AFF1','CDK9','CCNT1','CCNT2','MLLT1','MLLT3','DOT1L','LMO2','PBX3','RUNX2','SMAD1','KLF3','MEF2C','HOXA9','HOXA10','JMJD1C','HMGA2','KDM6A','SUPT3H','PROM1','FLT3','BMP2K','IGF1R','CDKN1B','CDK14','MEIS1','HOXA11','SIX1','SIX4','EYA1','CDKN2C','HPGD','GRIA3','FUT8','TLX3','TLX1','BCL11B','LDB1','LYL1','HHEX','PTCRA','REL','CCND2','BIRC2','BIRC3','TRAF1','BCL2L1','CD86','CD40','BCL6','IGH','MAF','ITGB7','NSD2','H3-5','H3-3B','H3C4','H3C3','H3C1','H3-3A','H3-4','H3C14','H3C15','H3C13','H3C6','H3C11','H3C8','H3C12','H3C10','H3C2','H3C7','PAX5','PAX8','PPARG','RXRA','RXRB','RXRG','PRCC','TFE3','CDKN1A','TMPRSS2','ERG','PLAU','PLAT','MMP3','MMP9','ZEB1','IL1R2','SPINT1','ETV1','ETV4','ETV5','SLC45A3','ELK4','DDX5','MYCN','MAX','MDM2','PTK2','TP53','BMI1','COMMD3-BMI1','SP1','ZBTB17','NTRK1','NGFR','MEN1','EWSR1','FLI1','IGF1','ID2','TGFBR2','IGFBP3','FEV','ATF1','ARNT2','ATM','MITF','WT1','PDGFA','IL2RB','BAIAP3','TSPAN7','MLF1','NR4A3','TAF15','FUS','DDIT3','CEBPB','IL6','NFKBIZ','NFKB1','RELA','CXCL8','PAX7','PAX3','FOXO1','FLT1','SS18','SSX1','SSX2','SSX2B','NUPR1','ASPSCR1','MET','GADD45A','GADD45B','GADD45G','BAX','BAK1','DDB2','POLK']
 
@@ -70,11 +73,16 @@ omics_df = omics_df[omics_df.histology == cancertype]
 #        f"{protein_data_path.split('.')[-1]} files are not supported."
 #    )
 
-protein_df = pd.read_csv(protein_data_path, index_col=0, header=None, names=[str(x) for x in range(768)]) #'entry_name')
-#print(protein_df.shape)
+protein_df = pd.read_csv(protein_data_path, index_col=0)#, header=None, names=[str(x) for x in range(768)]) #'entry_name')
+protein_df = protein_df[~protein_df.index.isnull()]
 protein_df.index = [i.split('|')[2] for i in protein_df.index]
-protein_seq_df = pd.read_csv(protein_data_seq_path, index_col='entry_name')
-#protein_df = pd.concat([protein_df, protein_seq_df], axis=1, join='outer')
+protein_seq_df = pd.read_csv(protein_data_seq_path, names = ['sequence'], index_col=0) #, index_col='entry_name')
+#print(protein_seq_df.head)
+protein_seq_df.index = [i.split('|')[2] for i in protein_seq_df.index]
+protein_df = pd.concat([protein_df, protein_seq_df], axis=1, join='outer')
+protein_df = protein_df[[s.split('_')[0] in cancer_genes for s in protein_df.index]]
+#print(protein_df.head)
+print("proteins:", protein_df.index, len(cancer_genes))
 
 with open(params_path) as f:
     params.update(json.load(f))
@@ -225,19 +233,67 @@ protein_encoder_rl.load(
 )
 protein_encoder_rl.eval()
 
-model_folder_name = site + '_' + model_name
+model_folder_name = site + '_' + model_name + '_combined'
 learner_combined = ReinforceProteinOmics(
     generator_rl, protein_encoder_rl,cell_encoder_rl, \
     protein_predictor, paccmann_predictor, protein_df, omics_df, \
     params, generator_smiles_language, model_folder_name, logger
 )
-learner_protein = REINFORCE_proteins(
-    generator_rl, protein_encoder_rl, predictor, protein_df, params,
-    model_folder_name, logger
+
+gru_encoder_rl_o = StackGRUEncoder(mol_params)
+gru_decoder_rl_o = StackGRUDecoder(mol_params)
+generator_rl_o = TeacherVAE(gru_encoder_rl_o, gru_decoder_rl_o)
+generator_rl_o.load(
+    os.path.join(
+        mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
+    ),
+    map_location=get_device()
 )
+generator_rl_o.eval()
+#generator_rl._associate_language(generator_smiles_language)
+
+cell_encoder_rl_o = ENCODER_FACTORY['dense'](cell_params)
+cell_encoder_rl_o.load(
+    os.path.join(
+        omics_model_path,
+        f"weights/best_{params.get('metric', 'both')}_encoder.pt"
+    ),
+    map_location=get_device()
+)
+cell_encoder_rl_o.eval()
+
+model_folder_name = site + '_' + model_name + '_omics'
 learner_omics = ReinforceOmic(
-    generator_rl, cell_encoder_rl, paccmann_predictor, omics_df, params,
-    model_folder_name, logger
+    generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
+    generator_smiles_language, model_folder_name, logger
+)
+
+gru_encoder_rl_p = StackGRUEncoder(mol_params)
+gru_decoder_rl_p = StackGRUDecoder(mol_params)
+generator_rl_p = TeacherVAE(gru_encoder_rl_p, gru_decoder_rl_p)
+generator_rl_p.load(
+    os.path.join(
+        mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
+    ),
+    map_location=get_device()
+)
+generator_rl_p.eval()
+#generator_rl._associate_language(generator_smiles_language)
+
+protein_encoder_rl_p = ENCODER_FACTORY['dense'](protein_params)
+protein_encoder_rl_p.load(
+    os.path.join(
+        protein_model_path,
+        f"weights/best_{params.get('metric', 'both')}_encoder.pt"
+    ),
+    map_location=get_device()
+)
+protein_encoder_rl_p.eval()
+
+model_folder_name = site + '_' + model_name + '_protein'
+learner_protein = ReinforceProtein(
+    generator_rl_p, protein_encoder_rl_p, protein_predictor, protein_df, params,
+    generator_smiles_language, model_folder_name, logger
 )
 
 # Split the samples for conditional generation and initialize training
@@ -250,7 +306,7 @@ train_protein, test_protein = protein_data_splitter(
 
 rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
 gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], [], []
-gen_mols_o ,gen_cell, gen_ic50, modes_o = [], [], [], []
+gen_mols_o ,gen_cell_o, gen_ic50_o, modes_o = [], [], [], []
 gen_mols_p ,gen_prot_p, gen_affinity_p, modes_p = [], [], [], []
 
 logger.info('Models restored, start training.')
@@ -340,9 +396,9 @@ for epoch in range(1, params['epochs'] + 1):
         base_predsP, predsP, protein_name, epoch, learner_combined.model_path,
         'train_combined', params['eval_batch_size']
     )
-    
+    #print(len(smiles), len(preds_o), len(predsO), len(preds_p))
     gs_omics = [
-        s for i, s in enumerate(smiles)
+        s for i, s in enumerate(smiles_o)
         if preds_o[i] < learner_omics.ic50_threshold
     ]
     gp_omics = preds_o[preds_o < learner_omics.ic50_threshold]
@@ -357,7 +413,7 @@ for epoch in range(1, params['epochs'] + 1):
         'train_omics', params['eval_batch_size']
     )
 
-    gs_protein = [s for i, s in enumerate(smiles) if preds_p[i] > 0.5]
+    gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
     gp_protein = preds_p[preds_p > 0.5]
     for p, s in zip(gp_protein, gs_protein):
         gen_mols_p.append(s)
@@ -408,10 +464,10 @@ for epoch in range(1, params['epochs'] + 1):
 
     gs = [
         s for i, s in enumerate(smiles)
-        if predsO[i] < learner.ic50_threshold and predsP[i] > 0.5
+        if predsO[i] < learner_combined.ic50_threshold and predsP[i] > 0.5
     ]
-    gp_o = predsO[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
-    gp_p = predsP[(predsO < learner.ic50_threshold) & (predsP > 0.5)]
+    gp_o = predsO[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
+    gp_p = predsP[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
 
     for p_o, p_p, s in zip(gp_o, gp_p, gs):
         gen_mols.append(s)
@@ -422,7 +478,7 @@ for epoch in range(1, params['epochs'] + 1):
         modes.append('test')
 
     gs_omics = [
-        s for i, s in enumerate(smiles)
+        s for i, s in enumerate(smiles_o)
         if preds_o[i] < learner_omics.ic50_threshold
     ]
     gp_omics = preds_o[preds_o < learner_omics.ic50_threshold]
@@ -432,7 +488,7 @@ for epoch in range(1, params['epochs'] + 1):
         gen_ic50_o.append(p)
         modes_o.append('train')
 
-    gs_protein = [s for i, s in enumerate(smiles) if preds_p[i] > 0.5]
+    gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
     gp_protein = preds_p[preds_p > 0.5]
     for p, s in zip(gp_protein, gs_protein):
         gen_mols_p.append(s)
@@ -444,7 +500,7 @@ for epoch in range(1, params['epochs'] + 1):
     for i in inds[:5]:
         logger.info(
             f'Epoch {epoch:d}, generated {gs[i]} against '
-            f'{eval_cell_lines} and protein {protein_name}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
+            f'{eval_cell_lines} and protein {eval_protein_name}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
         )
 
     # Save results (good molecules!) in DF
@@ -484,7 +540,7 @@ for epoch in range(1, params['epochs'] + 1):
             'tox21': [learner_omics.tox21(s) for s in gen_mols_o]
         }
     )
-    df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'))
+    df.to_csv(os.path.join(learner_omics.model_path, 'results', 'generated.csv'))
     # Plot loss development
     loss_df = pd.DataFrame({'loss': losses_o, 'rewards': rewards_o})
     loss_df.to_csv(
