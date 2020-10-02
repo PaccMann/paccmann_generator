@@ -352,20 +352,22 @@ for epoch in range(1, params['epochs'] + 1):
     learner_omics.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
     learner_protein.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
 
-    base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], protein_name, cell_line
+    base_smiles, base_predsP, base_predsO, idx = baseline.generate_compounds_and_evaluate(
+        epoch, params['batch_size'], protein_name, cell_line
     )
-    smiles_o, preds_o = learner_omics.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], cell_line
+    smiles_o, preds_o, idx_o = learner_omics.generate_compounds_and_evaluate(
+        epoch, params['batch_size'], cell_line
     )
-    smiles, predsP, predsO = learner_combined.generate_compounds_and_evaluate(
-        epoch, params['eval_batch_size'], protein_name, cell_line
+    smiles, predsP, predsO, idx_c = learner_combined.generate_compounds_and_evaluate(
+        epoch, params['batch_size'], protein_name, cell_line
     )
-    smiles_p, preds_p = (
+    smiles_p, preds_p, idx_p = (
         learner_protein.generate_compounds_and_evaluate(
-            epoch, params['eval_batch_size'], protein_name
+            epoch, params['batch_size'], protein_name
         )
     )
+    proteins = [val for i, val in enumerate(protein_name*params["batch_size"]) if i in idx_c]
+    cell = [val for i, val in enumerate(cell_line*params["batch_size"]) if i in idx_c]
     gs = [
         s for i, s in enumerate(smiles)
         if predsO[i] < learner_combined.ic50_threshold and predsP[i] > 0.5
@@ -373,10 +375,10 @@ for epoch in range(1, params['epochs'] + 1):
     gp_o = predsO[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
     gp_p = predsP[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
 
-    for p_o, p_p, s in zip(gp_o, gp_p, gs):
+    for p_o, p_p, s, p, c in zip(gp_o, gp_p, gs, proteins, cell):
         gen_mols.append(s)
-        gen_cell.append(cell_line)
-        gen_prot.append(protein_name)
+        gen_cell.append(c)
+        gen_prot.append(p)
         gen_affinity.append(p_p)
         gen_ic50.append(p_o)
         modes.append('train')
@@ -385,58 +387,60 @@ for epoch in range(1, params['epochs'] + 1):
     for i in inds[:5]:
         logger.info(
             f'Epoch {epoch:d}, generated {gs[i]} against '
-            f'protein {protein_name} and cell line {cell_line}.\n Predicted IC50 = {gp_o[i]} and Affinity = {gp_p[i]}. '
+            f'protein {gen_prot[i]} and cell line {gen_cell[i]}.\n Predicted IC50 = {gp_o[i]} and Affinity = {gp_p[i]}. '
         )
 
     plot_and_compare(
         base_predsO, predsO, site, cell_line, epoch, learner_combined.model_path,
-        'train_combined', params['eval_batch_size']
+        'train_combined', params['batch_size']
     )
     plot_and_compare_proteins(
         base_predsP, predsP, protein_name, epoch, learner_combined.model_path,
-        'train_combined', params['eval_batch_size']
+        'train_combined', params['batch_size']
     )
     #print(len(smiles), len(preds_o), len(predsO), len(preds_p))
+    cell = [val for i, val in enumerate(cell_line*params["batch_size"]) if i in idx_o]
     gs_omics = [
         s for i, s in enumerate(smiles_o)
         if preds_o[i] < learner_omics.ic50_threshold
     ]
     gp_omics = preds_o[preds_o < learner_omics.ic50_threshold]
-    for p, s in zip(gp_omics, gs_omics):
+    for p, s, c in zip(gp_omics, gs_omics, cell):
         gen_mols_o.append(s)
-        gen_cell_o.append(cell_line)
+        gen_cell_o.append(c)
         gen_ic50_o.append(p)
         modes_o.append('train')
 
     plot_and_compare(
         base_predsO, preds_o, site, cell_line, epoch, learner_omics.model_path,
-        'train_omics', params['eval_batch_size']
+        'train_omics', params['batch_size']
     )
 
+    proteins = [val for i, val in enumerate(protein_name*params["batch_size"]) if i in idx_p]
     gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
     gp_protein = preds_p[preds_p > 0.5]
-    for p, s in zip(gp_protein, gs_protein):
+    for p, s, prot in zip(gp_protein, gs_protein, proteins):
         gen_mols_p.append(s)
-        gen_prot_p.append(protein_name)
+        gen_prot_p.append(prot)
         gen_affinity_p.append(p)
         modes_p.append('train')
 
     plot_and_compare_proteins(
             base_predsP, preds_p, protein_name, epoch, learner_protein.model_path,
-            'train_protein', params['eval_batch_size']
+            'train_protein', params['batch_size']
         )
     
     # Evaluate on a validation cell line and protein.
-    base_smiles, base_predsP, base_predsO = baseline.generate_compounds_and_evaluate(
+    base_smiles, base_predsP, base_predsO, idx = baseline.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     )
-    smiles_o, preds_o = learner_omics.generate_compounds_and_evaluate(
+    smiles_o, preds_o, idx_o = learner_omics.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], eval_cell_lines
     )
-    smiles, predsP, predsO = learner_combined.generate_compounds_and_evaluate(
+    smiles, predsP, predsO, idx_c = learner_combined.generate_compounds_and_evaluate(
         epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     )
-    smiles_p, preds_p = (
+    smiles_p, preds_p, idx_p = (
         learner_protein.generate_compounds_and_evaluate(
             epoch, params['eval_batch_size'], eval_protein_names
         )
@@ -461,6 +465,8 @@ for epoch in range(1, params['epochs'] + 1):
         base_predsP, preds_p, eval_protein_names, epoch, learner_protein.model_path,
         'test_protein', params['eval_batch_size']
     )
+    proteins = [val for i, val in enumerate(eval_protein_names*params["eval_batch_size"]) if i in idx_c]
+    cell = [val for i, val in enumerate(eval_cell_lines*params["eval_batch_size"]) if i in idx_c]
 
     gs = [
         s for i, s in enumerate(smiles)
@@ -469,38 +475,40 @@ for epoch in range(1, params['epochs'] + 1):
     gp_o = predsO[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
     gp_p = predsP[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
 
-    for p_o, p_p, s in zip(gp_o, gp_p, gs):
+    for p_o, p_p, s, c, p in zip(gp_o, gp_p, gs, cell, proteins):
         gen_mols.append(s)
-        gen_cell.append(cell_line)
-        gen_prot.append(protein_name)
+        gen_cell.append(c)
+        gen_prot.append(p)
         gen_affinity.append(p_p)
         gen_ic50.append(p_o)
         modes.append('test')
 
+    cell = [val for i, val in enumerate(eval_cell_lines*params["eval_batch_size"]) if i in idx_o]
     gs_omics = [
         s for i, s in enumerate(smiles_o)
         if preds_o[i] < learner_omics.ic50_threshold
     ]
     gp_omics = preds_o[preds_o < learner_omics.ic50_threshold]
-    for p, s in zip(gp_omics, gs_omics):
+    for p, s, c in zip(gp_omics, gs_omics, cell):
         gen_mols_o.append(s)
-        gen_cell_o.append(cell_line)
+        gen_cell_o.append(c)
         gen_ic50_o.append(p)
-        modes_o.append('train')
+        modes_o.append('test')
 
+    proteins = [val for i, val in enumerate(eval_protein_names*params["eval_batch_size"]) if i in idx_p]
     gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
     gp_protein = preds_p[preds_p > 0.5]
-    for p, s in zip(gp_protein, gs_protein):
+    for p, s, prot in zip(gp_protein, gs_protein, proteins):
         gen_mols_p.append(s)
-        gen_prot_p.append(protein_name)
+        gen_prot_p.append(prot)
         gen_affinity_p.append(p)
-        modes_p.append('train')
+        modes_p.append('test')
     
     inds = np.argsort(gp_o)[::-1]
     for i in inds[:5]:
         logger.info(
             f'Epoch {epoch:d}, generated {gs[i]} against '
-            f'{eval_cell_lines} and protein {eval_protein_name}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
+            f'{gen_cell[i]} and protein {gen_prot[i]}.\n Predicted IC50 = {gp_o[i]}and Affinity = {gp_p[i]}. '
         )
 
     # Save results (good molecules!) in DF
