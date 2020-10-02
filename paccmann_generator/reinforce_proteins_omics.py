@@ -703,7 +703,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Batch processing
         lrps = 1
-        if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
+        if self.generator.decoder.latent_dim == 2 * self.encoderOmics.latent_size:
             lrps = 2
         hidden = self.generator.decoder.latent_to_hidden(
             latent_z.repeat(
@@ -731,8 +731,8 @@ class ReinforceProteinOmics(Reinforce):
 
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
-                list(self.generator.decoder.parameters()) +
-                list(self.encoder.parameters()), self.grad_clipping
+                list(self.generator.decoder.parameters()) + list(self.encoder.parameters()) +
+                list(self.encoderOmics.parameters()), self.grad_clipping
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item()
