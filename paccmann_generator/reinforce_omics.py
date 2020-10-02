@@ -269,7 +269,7 @@ class ReinforceOmic(Reinforce):
         if return_latent:
             return valid_smiles, log_preds, latent_z
         else:
-            return valid_smiles, log_preds
+            return valid_smiles, log_preds, valid_idx
 
     def update_reward_fn(self, params):
         """ Set the reward function

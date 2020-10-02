@@ -296,7 +296,7 @@ class ReinforceProtein(Reinforce):
         if return_latent:
             return valid_smiles, pred, latent_z
         else:
-            return valid_smiles, pred
+            return valid_smiles, pred, valid_idx
 
     def update_reward_fn(self, params):
         """ Set the reward function

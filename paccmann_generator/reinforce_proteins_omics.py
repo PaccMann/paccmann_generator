@@ -435,7 +435,7 @@ class ReinforceProteinOmics(Reinforce):
         if return_latent:
             return valid_smiles, predP, log_predsO, latent_z
         else:
-            return valid_smiles, predP, log_predsO
+            return valid_smiles, predP, log_predsO, valid_idx
 
     def update_reward_fn(self, params):
         """ Set the reward function
