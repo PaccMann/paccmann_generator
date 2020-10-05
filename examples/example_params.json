@@ -11,8 +11,8 @@
     "IC50_max": 11.83146,
     "IC50_threshold": 2,
     "clip_grad": 0.1,
-    "epochs": 30,
-    "steps": 5,
+    "epochs": 10,
+    "steps": 2,
     "batch_size": 256,
     "eval_batch_size": 500,
     "qed_weight": 0,
@@ -24,5 +24,5 @@
     "sider_weight": 0,
     "tox21_weight": 0,
     "C_frac_weight": 1,
-    "C_frac": 0.7
+    "C_frac": 0.5
 }
