@@ -313,7 +313,9 @@ logger.info('Models restored, start training.')
 
 # choose a validation cell line and protein.
 eval_cell_lines = np.random.choice(test_omics, size = 20, replace=True)
+eval_cell_lines = [str(i) for i in eval_cell_lines]
 eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=False)
+eval_protein_names = [str(i) for i in eval_protein_names]
 
 for epoch in range(1, params['epochs'] + 1):
 
