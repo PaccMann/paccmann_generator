@@ -61,14 +61,37 @@ class Lipinski(DrugEvaluator):
         mol_weight = Descriptors.MolWt(mol)
         mol_logp = round(Crippen.MolLogP(mol), 4)
 
+<<<<<<< HEAD
         return (
             (
                 num_hdonors <= 5 and num_hacceptors <= 10 and mol_weight < 500
                 and mol_logp < 5
+=======
+        pass_num_hdonors = num_hdonors <= 5
+        pass_num_hacceptors = num_hacceptors <= 10
+        pass_mol_weight = mol_weight < 500
+        pass_mol_logp = mol_logp < 5
+
+        return (
+            (
+                pass_num_hdonors and pass_num_hacceptors and pass_mol_weight
+                and pass_mol_logp
+>>>>>>> d61cd9f1492dd96962c6f86ae1f6a5880071f6fa
             ), {
                 'hydrogen_bond_donors': num_hdonors,
                 'hydrogen_bond_acceptors': num_hacceptors,
                 'molecular_weight': mol_weight,
+<<<<<<< HEAD
                 'logp': mol_logp
+=======
+                'logp': mol_logp,
+                'test_results':
+                    {
+                        'hydrogen_bond_donors': pass_num_hdonors,
+                        'hydrogen_bond_acceptors': pass_num_hacceptors,
+                        'molecular_weight': pass_mol_weight,
+                        'logp': pass_mol_logp
+                    }
+>>>>>>> d61cd9f1492dd96962c6f86ae1f6a5880071f6fa
             }
         )

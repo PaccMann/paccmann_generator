@@ -8,6 +8,8 @@ from .drug_evaluators.esol import ESOL
 from .drug_evaluators.molecular_weight import MolecularWeight
 from .drug_evaluators.qed import QED
 from .drug_evaluators.sas import SAS
+from .drug_evaluators.tox21 import Tox21
+from .drug_evaluators.organdb import OrganDB
 
 
 def filter_generated_drugs(
@@ -16,7 +18,9 @@ def filter_generated_drugs(
         'SAS': [1, 4],
         'QED': [0.3, 1],
         'ESOL': [-10, -2],
-        'MolecularWeight': [0, 1000]
+        'MolecularWeight': [0, 1000],
+        'Tox21': [0,0.4999],
+        'OrganDB': [0,0.4999]
     },
     overwrite_csv=False,
     csv_save=True,
@@ -69,6 +73,8 @@ def filter_generated_drugs(
     qed = QED()
     molecular_weight = MolecularWeight()
     esol = ESOL()
+    tox21 = Tox21()
+    organdb = OrganDB()
 
     # Compute scores
     molecules = data['SMILES'].apply(Chem.MolFromSmiles)
@@ -76,6 +82,8 @@ def filter_generated_drugs(
     data['SAS'] = molecules.apply(sas)
     data['ESOL'] = molecules.apply(esol)
     data['MolecularWeight'] = molecules.apply(molecular_weight)
+    data['Tox21'] = molecules.apply(tox21)
+    data['OrganDB'] = molecules.apply(organdb)
     data['ID'] = data.apply(
         lambda row: hashlib.
         md5(f'{row["cell_line"]}-{row["SMILES"]}'.encode('utf-8')).hexdigest(),

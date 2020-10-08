@@ -60,7 +60,7 @@ class SCScore(DrugEvaluator):
             smiles = Chem.MolToSmiles(mol, canonical=True)
         elif type(mol) == str:
             smiles = mol
-            molecule = Chem.MolFromSmiles(smiles, sanitize=True)
+            molecule = Chem.MolFromSmiles(smiles, sanitize=False)
             if molecule is None:
                 raise ValueError("Invalid SMILES string.")
         else:
