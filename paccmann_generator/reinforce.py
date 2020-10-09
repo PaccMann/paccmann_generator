@@ -115,7 +115,6 @@ class Reinforce(object):
         Receives a list of SMILES.
         Converts it to a numerical torch Tensor according to smiles_language
         """
-
         if target == 'generator':
             # NOTE: Code for this in the normal REINFORCE class
             raise ValueError('Priming drugs not yet supported')
@@ -162,23 +161,23 @@ class Reinforce(object):
         mols_numerical = self.generator.generate(
             latent,
             prime_input=torch.Tensor(
-                [self.generator.smiles_language.start_index]
+                [self.generator_smiles_language.start_index]    ########################### generator.smiles_language
             ).long(),
-            end_token=torch.Tensor([self.generator.smiles_language.stop_index]).long(),
+            end_token=torch.Tensor([self.generator_smiles_language.stop_index]).long(),
             generate_len=self.generate_len,
             search=SamplingSearch(temperature=self.temperature)
         )  # yapf: disable
         # Retrieve SMILES from numericals
         smiles_num_tuple = [
             (
-                self.generator.smiles_language.token_indexes_to_smiles(
+                self.generator_smiles_language.token_indexes_to_smiles(
                     mol_num.tolist()
                 ),
                 torch.cat(
                     [
                         mol_num.long(),
                         torch.tensor(
-                            2 * [self.generator.smiles_language.stop_index]
+                            2 * [self.generator_smiles_language.stop_index]
                         )
                     ]
                 )
@@ -188,7 +187,7 @@ class Reinforce(object):
 
         # NOTE: If SMILES is used instead of SELFIES this line needs adjustment
         smiles = [
-            self.generator.smiles_language.selfies_to_smiles(sm[0])
+            self.generator_smiles_language.selfies_to_smiles(sm[0])
             for sm in smiles_num_tuple
         ]
 
@@ -212,12 +211,14 @@ class Reinforce(object):
 
     def update_reward_fn(self, params):
         """ Set the reward function
-
         Arguments:
             params (dict): Hyperparameter for PaccMann reward function
 
 
         """
+        self.clintox_weight = params.get('clintox_weight', 0.)
+        self.organdb_weight = params.get('organdb_weight', 0.)
+        self.sider_weight = params.get('sider_weight', 0.)
         self.qed_weight = params.get('qed_weight', 0.)
         self.scscore_weight = params.get('scscore_weight', 0.)
         self.esol_weight = params.get('esol_weight', 0.)

@@ -1,8 +1,14 @@
 """PaccMann^RL: Protein-driven drug generation"""
+import os
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torch.nn.functional as F
-
+from .drug_evaluators import (
+    QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
+)
+from rdkit import Chem
 from pytoda.transforms import LeftPadding, ToTensor
 
 from .reinforce import Reinforce
@@ -11,7 +17,7 @@ from .reinforce import Reinforce
 class ReinforceProtein(Reinforce):
 
     def __init__(
-        self, generator, encoder, predictor, protein_df, params, model_name,
+        self, generator, encoder, predictor, protein_df, params, generator_smiles_language, model_name,
         logger
     ):
         """
@@ -36,8 +42,8 @@ class ReinforceProtein(Reinforce):
             generator, encoder, params, model_name, logger
         )  # yapf: disable
 
-        self.predictor = predictor
-        self.predictor.eval()
+        self.affinity_predictor = predictor
+        self.affinity_predictor.eval()
 
         self.protein_df = protein_df
 
@@ -50,8 +56,20 @@ class ReinforceProtein(Reinforce):
             predictor.protein_language.padding_index
         )
 
+        self.generator_smiles_language = generator_smiles_language
+
         self.protein_to_tensor = ToTensor(self.device)
         self.update_params(params)
+
+        self.tox21 = Tox21(
+            params.get(
+                'tox21_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Tox21_deepchem'
+                )
+            )
+        )
 
     def update_params(self, params):
         """Update parameter
@@ -59,7 +77,60 @@ class ReinforceProtein(Reinforce):
         Args:
             params (dict): Dict with (new) parameters
         """
-        super().update_params(params)
+        # parameter for reward function
+        self.qed = QED()
+        self.scscore = SCScore()
+        self.esol = ESOL()
+        self.sas = SAS()
+        self.lipinski = Lipinski()
+        self.clintox = ClinTox(
+            params.get(
+                'clintox_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'ClinToxMulti'
+                )
+            )
+        )
+        self.sider = SIDER(
+            params.get(
+                'sider_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Sider'
+                )
+            )
+        )
+        self.tox21 = Tox21(
+            params.get(
+                'tox21_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Tox21_deepchem'
+                )
+            )
+        )
+        self.organdb = OrganDB(
+            params.get(
+                'organdb_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Organdb_github'
+                )
+            ), params['site']
+        )
+
+        self.update_reward_fn(params)
+        # discount factor
+        self.gamma = params.get('gamma', 0.99)
+        # maximal length of generated molecules
+        self.generate_len = params.get(
+            'generate_len', self.affinity_predictor.params['smiles_padding_length'] - 2
+        )
+        # smoothing factor for softmax during token sampling in decoder
+        self.temperature = params.get('temperature', 0.8)
+        # gradient clipping in decoder
+        self.grad_clipping = params.get('clip_grad', None)
 
     def encode_protein(self, protein=None, batch_size=128):
         """
@@ -71,16 +142,30 @@ class ReinforceProtein(Reinforce):
         if protein is None:
             latent_z = torch.randn(1, batch_size, self.encoder.latent_size)
         else:
-
-            protein_tensor, _ = self.protein_to_numerical(
-                protein, encoder_uses_sequence=False
-            )
-            protein_mu, protein_logvar = self.encoder(protein_tensor)
+            protein_mu = []
+            protein_logvar = []
+            for prot in protein:
+                protein_encoder_tensor, _ = (
+                    self.protein_to_numerical(
+                        prot, encoder_uses_sequence=False, predictor_uses_sequence=True
+                    )
+                )
+                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
+                protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
+            protein_mu = torch.as_tensor(protein_mu)
+            protein_logvar = torch.as_tensor(protein_logvar)
+            
+            protein_mu_batch = protein_mu.repeat(batch_size, 1)
+            protein_logvar = protein_logvar.repeat(batch_size, 1)
+            if protein_mu_batch.size()[0]>batch_size:
+                protein_mu_batch = protein_mu_batch[:batch_size]
+                protein_logvar = protein_logvar[:batch_size]
 
             latent_z = torch.unsqueeze(
                 self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
+                    protein_mu_batch,
+                    protein_logvar
                 ), 0
             )
         return latent_z
@@ -103,14 +188,13 @@ class ReinforceProtein(Reinforce):
                 protein sequence or an embedding.
 
         """
-
+        protein_sequence = self.protein_df.loc[protein]['Sequence']
         if predictor_uses_sequence:
-            protein_sequence = self.protein_df.loc[protein]['Sequence']
             sequence_tensor_p = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.predictor.protein_language.
-                        sequence_to_token_indexes(protein_sequence)
+                        self.affinity_predictor.protein_language.
+                        sequence_to_token_indexes(protein_sequence) 
                     )
                 ), 0
             )
@@ -158,7 +242,7 @@ class ReinforceProtein(Reinforce):
         if primed_drug != ' ':
             raise ValueError('Drug priming not yet supported.')
 
-        self.predictor.eval()
+        self.affinity_predictor.eval()
         self.encoder.eval()
         self.generator.eval()
 
@@ -168,32 +252,48 @@ class ReinforceProtein(Reinforce):
                 1, batch_size, self.generator.decoder.latent_dim
             )
         else:
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False
+            protein_mu = []
+            protein_logvar = []
+            protein_predictor_tensor = []
+            for prot in protein:
+                protein_encoder_tensor, protein_predictor_tensor_i = (
+                    self.protein_to_numerical(
+                        prot, encoder_uses_sequence=False, predictor_uses_sequence=True
+                    )
                 )
-            )
-            protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
-
-            # TODO: I need to make sure that I only sample around the encoding
-            # of the protein, not the entire latent space.
+                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_predictor_tensor.append(torch.unsqueeze(protein_predictor_tensor_i, 0).detach().numpy()[0][0])
+                protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
+                protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
+            protein_mu = torch.as_tensor(protein_mu)
+            protein_logvar = torch.as_tensor(protein_logvar)
+            protein_predictor_tensor = torch.as_tensor(protein_predictor_tensor)
+            
+            protein_mu_batch = protein_mu.repeat(batch_size, 1)
+            protein_logvar = protein_logvar.repeat(batch_size, 1)
+            protein_predictor_tensor = protein_predictor_tensor.repeat(batch_size, 1)
+            if protein_mu_batch.size()[0]>batch_size:
+                protein_mu_batch = protein_mu_batch[:batch_size]
+                protein_logvar = protein_logvar[:batch_size]
+                protein_predictor_tensor = protein_predictor_tensor[:batch_size]
+            
             latent_z = torch.unsqueeze(
                 self.reparameterize(
-                    protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
+                    protein_mu_batch,
+                    protein_logvar
                 ), 0
             )
 
         # Generate drugs
-        valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
             latent_z, remove_invalid=remove_invalid
         )
 
         smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
 
         # Evaluate drugs
-        pred, pred_dict = self.predictor(
-            smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
+        pred, pred_dict = self.affinity_predictor(
+            smiles_t, protein_predictor_tensor[valid_idx]
         )
         pred = np.squeeze(pred.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
@@ -201,15 +301,19 @@ class ReinforceProtein(Reinforce):
         if return_latent:
             return valid_smiles, pred, latent_z
         else:
-            return valid_smiles, pred
+            return valid_smiles, pred, valid_idx
 
     def update_reward_fn(self, params):
         """ Set the reward function
+        
         Arguments:
-            params (dict): Hyperparameter for PaccMann reward function
+            params {dict} -- Hyperparameter for PaccMann reward function
+
+
         """
         super().update_reward_fn(params)
         self.affinity_weight = params.get('affinity_weight', 1.)
+        self.tox21_weight = params.get('tox21_weight', .5)
 
         def tox_f(s):
             x = 0
@@ -226,26 +330,26 @@ class ReinforceProtein(Reinforce):
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
-            lambda smiles, protein: (
-                self.affinity_weight * self.get_reward_affinity(
-                    smiles, protein
-                ) + np.array([tox_f(s) for s in smiles])
+            lambda smiles, protein, valid_idx, batch_size: (
+                self.affinity_weight * self.
+                get_reward_affinity(smiles, protein, valid_idx, batch_size) + np.
+                array([tox_f(s) or s in smiles])
             )
         )
 
-    def get_reward(self, valid_smiles, protein):
+    def get_reward(self, valid_smiles, protein, valid_idx, batch_size):
         """Get the reward
-
+        
         Arguments:
             valid_smiles (list): A list of valid SMILES strings.
             protein (str): Name of the target protein
-
+        
         Returns:
             np.array: computed reward.
         """
-        return self.reward_fn(valid_smiles, protein)
+        return self.reward_fn(valid_smiles, protein, valid_idx, batch_size)
 
-    def get_reward_affinity(self, valid_smiles, protein):
+    def get_reward_affinity(self, valid_smiles, protein, idx, batch_size):
         """
         Get the reward from affinity predictor
 
@@ -265,15 +369,57 @@ class ReinforceProtein(Reinforce):
         if len(smiles_tensor) == 0:
             return 0
 
-        _, protein_tensor = self.protein_to_numerical(
-            protein, encoder_uses_sequence=False
-        )
-
-        pred, pred_dict = self.predictor(
-            smiles_tensor, protein_tensor.repeat(smiles_tensor.shape[0], 1)
+        protein_tensor = []
+        for prot in protein:
+            _, protein_tensor_i = self.protein_to_numerical(
+                prot, encoder_uses_sequence=False
+            )
+            protein_tensor.append(torch.unsqueeze(protein_tensor_i, 0).detach().numpy()[0][0])
+        protein_tensor = torch.as_tensor(protein_tensor)
+        protein_tensor = protein_tensor.repeat(batch_size, 1)
+        if protein_tensor.size()[0]>batch_size:
+            protein_tensor = protein_tensor[:batch_size]
+        pred, pred_dict = self.affinity_predictor(
+            smiles_tensor, protein_tensor[idx]
         )
 
         return np.squeeze(pred.detach().numpy())
+
+    def smiles_to_numerical(self, smiles_list, target='predictor'):
+        """
+        Receives a list of SMILES.
+        Converts it to a numerical torch Tensor according to smiles_language
+        """
+
+        if target == 'generator':
+            # NOTE: Code for this in the normal REINFORCE class
+            raise ValueError('Priming drugs not yet supported')
+
+        # TODO: Workaround since predictor does not understand aromatic carbons
+        smiles_list = [
+            Chem.MolToSmiles(
+                Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+            ).replace(':', '') for s in smiles_list
+        ]
+
+        # Convert strings to numbers and padd length.
+        smiles_num = [
+            torch.unsqueeze(
+                self.smiles_to_tensor(
+                    self.pad_smiles_predictor(
+                        self.affinity_predictor.smiles_language.
+                        smiles_to_token_indexes(smiles)
+                    )
+                ), 0
+            ) for smiles in smiles_list
+        ]
+
+        # Catch scenario where all SMILES are invalid
+        if len(smiles_num) == 0:
+            return torch.Tensor()
+
+        smiles_tensor = torch.cat(smiles_num, dim=0)
+        return smiles_tensor
 
     def policy_gradient(self, protein, epoch, batch_size=10):
         """
@@ -299,7 +445,7 @@ class ReinforceProtein(Reinforce):
         )
 
         # Get rewards (list, one reward for each valid smiles)
-        rewards = self.get_reward(valid_smiles, protein)
+        rewards = self.get_reward(valid_smiles, protein, valid_idx, batch_size)
         reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
@@ -343,3 +489,4 @@ class ReinforceProtein(Reinforce):
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item()
+

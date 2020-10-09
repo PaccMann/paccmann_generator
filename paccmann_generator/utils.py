@@ -67,11 +67,23 @@ def omics_data_splitter(omics_df, site, test_fraction):
     test_cell_lines = cell_lines[inds[:ceil(len(cell_lines) * test_fraction)]]
     train_cell_lines = cell_lines[inds[ceil(len(cell_lines) * test_fraction):]]
 
-<<<<<<< HEAD
-    return train_cell_lines, test_cell_lines
-=======
     return train_cell_lines.tolist(), test_cell_lines.tolist()
->>>>>>> d61cd9f1492dd96962c6f86ae1f6a5880071f6fa
+
+def protein_data_splitter(protein_df, test_fraction):
+    """
+    Split protein data into train and test.
+    Args:
+        protein_df    A pandas df of protein data for cancer genes
+        test_fraction  The fraction of proteins in test data
+
+    Returns:
+        train_df, test_df (tuple): A tuple of lists used for training and testing
+    """
+    msk = np.random.rand(len(protein_df)) < test_fraction
+    test_df = protein_df[~msk]
+    train_df = protein_df[msk]
+
+    return train_df, test_df
 
 
 def disable_rdkit_logging():

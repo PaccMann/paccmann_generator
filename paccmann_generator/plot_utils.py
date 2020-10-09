@@ -49,10 +49,10 @@ def plot_and_compare(
     plt.xlabel('Predicted log(micromolar IC50)')
     plt.ylabel(f'Density of generated molecules (n={bs})')
     t1 = 'PaccMann$^{\mathrm{RL}}$ '
-    s = site.replace('_', ' ')
-    c = cell_line.replace('_', ' ')
-    t2 = f'generator for {s} cancer. (cell: {c})'
-    plt.title(t1 + t2, size=13)
+    #s = site.replace('_', ' ')
+    #c = cell_line.replace('_', ' ')
+    #t2 = f'generator for {s} cancer. (cell: {c})'
+    plt.title(t1 , size=13) #+ t2
     plt.text(0.67, 0.70, valid, weight='bold', transform=plt.gca().transAxes)
     plt.text(
         0.05,
@@ -67,7 +67,90 @@ def plot_and_compare(
     plt.savefig(
         os.path.join(
             save_path,
-            f'results/{mode}_{cell_line}_epoch_{epoch}_eff_{biased_ratio}.pdf'
+            f'results/{mode}_epoch_{epoch}_eff_{biased_ratio}.pdf'
+        )
+    )
+    plt.clf()
+
+
+def plot_and_compare_proteins(
+    unbiased_preds, biased_preds, protein, epoch, save_path, mode, bs
+):
+
+    biased_ratio = np.round(
+        100 * (np.sum(biased_preds > 0.5) / len(biased_preds)), 1
+    )
+    unbiased_ratio = np.round(
+        100 * (np.sum(unbiased_preds > 0.5) / len(unbiased_preds)), 1
+    )
+    print(
+        f'NAIVE - {mode}: Percentage of binding compounds = {unbiased_ratio}'
+    )
+    print(f'BIASED - {mode}: Percentage of binding compounds = {biased_ratio}')
+
+    fig, ax = plt.subplots()
+    sns.distplot(
+        unbiased_preds,
+        kde_kws={
+            'shade': True,
+            'alpha': 0.5,
+            'linewidth': 2,
+            'clip': [0, 1],
+            'kernel': 'cos'
+        },
+        color='grey',
+        label=f'Unbiased: {unbiased_ratio}% ',
+        kde=True,
+        rug=True,
+        hist=False
+    )
+    sns.distplot(
+        biased_preds,
+        kde_kws={
+            'shade': True,
+            'alpha': 0.5,
+            'linewidth': 2,
+            'clip': [0, 1],
+            'kernel': 'cos'
+        },
+        color='red',
+        label=f'Optimized: {biased_ratio}% ',
+        kde=True,
+        rug=True,
+        hist=False
+    )
+    valid = f'SMILES validity: {round((len(biased_preds)/bs) * 100, 1)}%'
+    txt = "$\mathbf{Drug \ binding}$: "
+    handles, labels = plt.gca().get_legend_handles_labels()
+    patch = mpatches.Patch(color='none', label=txt)
+
+    handles.insert(0, patch)  # add new patches and labels to list
+    labels.insert(0, txt)
+
+    plt.legend(handles, labels, loc='upper left')
+    plt.xlabel('Predicted binding probability')
+    plt.ylabel(f'Density of generated molecules')
+    t1 = 'PaccMann$^{\mathrm{RL}}$ '
+    # protein_name = '_'.join(protein.split('=')[1].split('-')[:-1])
+    # organism = protein.split('=')[-1]
+    # t2 = f'generator for: {protein_name}\n({organism})'
+    protein_name = protein
+    #t2 = f'generator for: {protein_name}\n'
+    plt.title(t1, size=10) # + t2
+    plt.text(
+        0.55,
+        0.95,
+        'Predicted as binding',
+        weight='bold',
+        color='grey',
+        transform=plt.gca().transAxes
+    )
+    ax.axvspan(0.5, 1.2, alpha=0.5, color=[0.85, 0.85, 0.85])
+    plt.xlim([0., 1.])
+    plt.savefig(
+        os.path.join(
+            save_path,
+            f'results/{mode}_epoch_{epoch}_aff_{biased_ratio}.pdf'
         )
     )
     plt.clf()
@@ -157,7 +240,7 @@ def plot_and_compare_proteins(
 
 
 def plot_loss(
-    loss, reward, epoch, cell_line, save_path, rolling=1, site='unknown'
+    loss, reward, epoch, save_path, rolling=1, site='unknown'
 ):
     loss = pd.Series(loss).rolling(rolling).mean()
     rewards = pd.Series(reward).rolling(rolling).mean()
@@ -168,11 +251,11 @@ def plot_loss(
     # Plot KLD on second y axis
     _ = plt.twinx()
     s = site.replace('_', ' ')
-    _ = cell_line.replace('_', ' ')
+    #_ = cell_line.replace('_', ' ')
     plt.plot(np.arange(len(rewards)), rewards, color='g')
     plt.ylabel('Achieved rewards', size=12).set_color('g')
     plt.title('PaccMann$^{\mathrm{RL}}$ generator for ' + s + ' cancer')
     plt.savefig(
-        os.path.join(save_path, f'results/loss_ep_{epoch}_cell_{cell_line}')
+        os.path.join(save_path, f'results/loss_ep_{epoch}')
     )
     plt.clf()

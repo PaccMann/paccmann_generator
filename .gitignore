@@ -107,4 +107,12 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+.vscode
+data
+paccmann
+pvae
+
 /results
+fasta2csv.py
+output.csv
+test_C_frac_0_5_new_test.out

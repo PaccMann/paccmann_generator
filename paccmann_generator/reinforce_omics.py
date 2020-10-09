@@ -4,7 +4,10 @@ import numpy as np
 import seaborn as sns
 import torch
 import torch.nn.functional as F
-
+from .drug_evaluators import (
+    QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
+)
+import os
 from pytoda.transforms import LeftPadding
 
 from .reinforce import Reinforce
@@ -13,7 +16,7 @@ from .reinforce import Reinforce
 class ReinforceOmic(Reinforce):
 
     def __init__(
-        self, generator, encoder, predictor, gep_df, params, model_name, logger
+        self, generator, encoder, predictor, gep_df, params, generator_smiles_language, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -46,6 +49,7 @@ class ReinforceOmic(Reinforce):
             params['predictor_smiles_length'],
             predictor.smiles_language.padding_index
         )
+        self.generator_smiles_language = generator_smiles_language
 
         self.gep_df = gep_df
         self.update_params(params)
@@ -55,8 +59,61 @@ class ReinforceOmic(Reinforce):
 
         Args:
             params (dict): Dict with (new) parameters
-        """
-        super().update_params(params)
+        """ 
+        # parameter for reward function
+        self.qed = QED()
+        self.scscore = SCScore()
+        self.esol = ESOL()
+        self.sas = SAS()
+        self.lipinski = Lipinski()
+        self.clintox = ClinTox(
+            params.get(
+                'clintox_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'ClinToxMulti'
+                )
+            )
+        )
+        self.sider = SIDER(
+            params.get(
+                'sider_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Sider'
+                )
+            )
+        )
+        self.tox21 = Tox21(
+            params.get(
+                'tox21_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Tox21_deepchem'
+                )
+            )
+        )
+        self.organdb = OrganDB(
+            params.get(
+                'organdb_path',
+                os.path.join(
+                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
+                    'cytotoxicity', 'models', 'Organdb_github'
+                )
+            ), params['site']
+        )
+
+        self.update_reward_fn(params)
+        # discount factor
+        self.gamma = params.get('gamma', 0.99)
+        # maximal length of generated molecules
+        self.generate_len = params.get(
+            'generate_len', self.predictor.params['smiles_padding_length'] - 2
+        )
+        # smoothing factor for softmax during token sampling in decoder
+        self.temperature = params.get('temperature', 0.8)
+        # gradient clipping in decoder
+        self.grad_clipping = params.get('clip_grad', None)
 
         # critic: upper and lower bound of log(IC50) for de-normalization
         self.ic50_min = params.get('IC50_min', -8.77435)
@@ -76,20 +133,37 @@ class ReinforceOmic(Reinforce):
         """
         Encodes cell line in latent space with GEP encoder.
         """
-        gep_t = torch.unsqueeze(
-            torch.Tensor(
-                self.gep_df[
-                    self.gep_df['cell_line'] == cell_line  # yapf: disable
-                ].iloc[0].gene_expression.values
-            ),
-            0
-        )
-        cell_mu, cell_logvar = self.encoder(gep_t)
+        cell_mu = []
+        cell_logvar = []
+        #gep_ts = []
+        for cell in cell_line:
+            gep_t = torch.unsqueeze(
+                torch.Tensor(
+                    self.gep_df[
+                        self.gep_df['cell_line'] == cell  # yapf: disable
+                    ].iloc[0].gene_expression.values
+                ),
+                0
+            )
+            #gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+            cell_mu_i, cell_logvar_i = self.encoder(gep_t)
+            cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
+            cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
+        #gep_ts = torch.as_tensor(gep_ts)
+        cell_mu = torch.as_tensor(cell_mu)
+        cell_logvar = torch.as_tensor(cell_logvar)
 
+        cell_mu_batch = cell_mu.repeat(batch_size, 1)
+        cell_logvar = cell_logvar.repeat(batch_size, 1)
+        #gep_ts = gep_ts.repeat(batch_size, 1)
+        if cell_mu_batch.size()[0]>batch_size:
+            cell_mu_batch = cell_mu_batch[:batch_size]
+            cell_logvar = cell_logvar[:batch_size]
+            #gep_ts = gep_ts[:batch_size]
         latent_z = torch.unsqueeze(
             self.reparameterize(
-                cell_mu.repeat(batch_size, 1),
-                cell_logvar.repeat(batch_size, 1)
+                cell_mu_batch,
+                cell_logvar
             ), 0
         )
         return latent_z
@@ -125,24 +199,42 @@ class ReinforceOmic(Reinforce):
                 1, batch_size, self.generator.decoder.latent_dim
             )
         else:
-            gep_t = torch.unsqueeze(
-                torch.Tensor(
-                    self.gep_df[
-                        self.gep_df['cell_line'] == cell_line  # yapf: disable
-                    ].iloc[0].gene_expression.values
-                ),
-                0
-            )
-            cell_mu, cell_logvar = self.encoder(gep_t)
-
-            # TODO: I need to make sure that I only sample around the encoding
-            # of the cell, not the entire latent space.
+            cell_mu = []
+            cell_logvar = []
+            gep_ts = []
+            for cell in cell_line:
+                gep_t = torch.unsqueeze(
+                    torch.Tensor(
+                        self.gep_df[
+                            self.gep_df['cell_line'] == cell  # yapf: disable
+                        ].iloc[0].gene_expression.values
+                    ),
+                    0
+                )
+                gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+                cell_mu_i, cell_logvar_i = self.encoder(gep_t)
+                #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
+                cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
+                cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
+            gep_ts = torch.as_tensor(gep_ts)
+            cell_mu = torch.as_tensor(cell_mu)
+            cell_logvar = torch.as_tensor(cell_logvar)
+            #print("before", cell_mu.size())
+            #print(cell_mu)
+            cell_mu_batch = cell_mu.repeat(batch_size, 1)
+            cell_logvar = cell_logvar.repeat(batch_size, 1)
+            gep_ts = gep_ts.repeat(batch_size, 1)
+            if cell_mu_batch.size()[0]>batch_size:
+                cell_mu_batch = cell_mu_batch[:batch_size]
+                cell_logvar = cell_logvar[:batch_size]
+                gep_ts = gep_ts[:batch_size]
             latent_z = torch.unsqueeze(
                 self.reparameterize(
-                    cell_mu.repeat(batch_size, 1),
-                    cell_logvar.repeat(batch_size, 1)
+                    cell_mu_batch,
+                    cell_logvar
                 ), 0
             )
+
         if type(primed_drug) != str:
             raise TypeError('Provide drug as SMILES string.')
 
@@ -161,7 +253,7 @@ class ReinforceOmic(Reinforce):
         # latent_z += latent_drug
 
         # Generate drugs
-        valid_smiles, valid_nums, _ = self.get_smiles_from_latent(
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
             latent_z, remove_invalid=remove_invalid
         )
 
@@ -169,7 +261,7 @@ class ReinforceOmic(Reinforce):
 
         # Evaluate drugs
         pred, pred_dict = self.predictor(
-            smiles_t, gep_t.repeat(len(valid_smiles), 1)
+            smiles_t, gep_ts[valid_idx]
         )
         log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
         self.plot_hist(log_preds, cell_line, epoch, batch_size)
@@ -177,14 +269,13 @@ class ReinforceOmic(Reinforce):
         if return_latent:
             return valid_smiles, log_preds, latent_z
         else:
-            return valid_smiles, log_preds
+            return valid_smiles, log_preds, valid_idx
 
     def update_reward_fn(self, params):
         """ Set the reward function
-
+        
         Arguments:
-            params (dict): Hyperparameter for PaccMann reward function
-
+            params {dict} -- Hyperparameter for PaccMann reward function
 
         """
         super().update_reward_fn(params)
@@ -194,6 +285,7 @@ class ReinforceOmic(Reinforce):
         # inside the range [0, 1].
         # SCScore is in [1, 5] with 5 being worst
         # QED is naturally in [0, 1] with 1 being best
+        
         def tox_f(s):
             x = 0
             if self.tox21_weight > 0.:
@@ -207,33 +299,36 @@ class ReinforceOmic(Reinforce):
             return x
 
         self.reward_fn = (
-            lambda smiles, cell: (
-                self.paccmann_weight * self.get_reward_paccmann(smiles, cell) +
+            lambda smiles, cell, idx, batch_size: (
+                self.paccmann_weight * self.get_reward_paccmann(smiles, cell, idx, batch_size) +
                 np.array(
                     [
-                        self.qed_weight * self.qed(s) + self.scscore_weight *
-                        ((self.scscore(s) - 1) *
-                         (-1 / 4) + 1) + self.esol_weight *
-                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0
-                         ) + tox_f(s) for s in smiles
+                        self.qed_weight * self.qed(s) + 
+                        self.scscore_weight *((self.scscore(s) - 1) * (-1 / 4) + 1) + 
+                        self.esol_weight * (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0) +
+                        #self.tox21_weight * self.tox21(s) + 
+                        #self.sider_weight * self.sider(s) + 
+                        #self.clintox_weight * self.clintox(s) +
+                        #self.organdb_weight * self.organdb(s) for s in smiles
+                        tox_f(s) for s in smiles
                     ]
                 )
             )
         )
 
-    def get_reward(self, valid_smiles, cell_line):
+    def get_reward(self, valid_smiles, cell_line, idx, batch_size):
         """Get the reward
-
+        
         Arguments:
             valid_smiles (list): A list of valid SMILES strings.
             cell_line (str): String containing the cell line to index.
-
+        
         Returns:
             np.array: computed reward.
         """
-        return self.reward_fn(valid_smiles, cell_line)
+        return self.reward_fn(valid_smiles, cell_line, idx, batch_size)
 
-    def get_reward_paccmann(self, valid_smiles, cell_line):
+    def get_reward_paccmann(self, valid_smiles, cell_line, idx, batch_size):
         """
         Get the reward from PaccMann
 
@@ -253,17 +348,26 @@ class ReinforceOmic(Reinforce):
         if len(smiles_tensor) == 0:
             return 0
 
-        gep_t = torch.unsqueeze(
-            torch.Tensor(
-                self.gep_df[
-                    self.gep_df['cell_line'] == cell_line  # yapf: disable
-                ].iloc[0].gene_expression.values
-            ),
-            0
-        )
+        gep_ts = []
+        for cell in cell_line:
+            gep_t = torch.unsqueeze(
+                torch.Tensor(
+                    self.gep_df[
+                        self.gep_df['cell_line'] == cell  # yapf: disable
+                    ].iloc[0].gene_expression.values
+                ),
+                0
+            )
+            gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+        gep_ts = torch.as_tensor(gep_ts)
+        gep_ts = gep_ts.repeat(batch_size, 1)
+        if gep_ts.size()[0]>batch_size:
+            gep_ts = gep_ts[:batch_size]
+
         pred, pred_dict = self.predictor(
-            smiles_tensor, gep_t.repeat(len(valid_smiles), 1)
+            smiles_tensor, gep_ts[idx]
         )
+        
         log_micromolar_pred = self.get_log_molar(
             np.squeeze(pred.detach().numpy())
         )
@@ -297,7 +401,7 @@ class ReinforceOmic(Reinforce):
         )
 
         # Get rewards (list, one reward for each valid smiles)
-        rewards = self.get_reward(valid_smiles, cell_line)
+        rewards = self.get_reward(valid_smiles, cell_line, valid_idx, batch_size)
         reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
 
         # valid_nums is a list of torch.Tensor, each with varying length,
