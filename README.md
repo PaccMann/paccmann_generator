@@ -10,11 +10,12 @@ Multimodal generative models for PaccMann^RL.
 ## Installation
 
 The library itself has few dependencies (see [setup.py](setup.py)) with loose requirements.
+To run the example training script we provide environment files under `examples/`.
 
 Create a conda environment:
 
 ```sh
-conda env create -f conda.yml
+conda env create -f examples/IC50/conda.yml
 ```
 
 Activate the environment:
@@ -29,19 +30,12 @@ Install in editable mode for development:
 pip install -e .
 ```
 
-To run the example training script we provide additional requirements under `examples/`.
-Instal them:
-
-```sh
-pip install -r examples/requirements.txt
-```
-
 ## Example usage
 
-In the `examples` directory is a training script [train_paccmann_rl.py](./examples/train_paccmann_rl.py) that makes use of `paccmann_generator`.
+In the `examples/IC50` directory is a training script [train_paccmann_rl.py](./examples/IC50/train_paccmann_rl.py) that makes use of `paccmann_generator`.
 
 ```console
-(paccmann_generator) $ python examples/train_paccmann_rl.py -h
+(paccmann_generator) $ python examples/IC50/train_paccmann_rl.py -h
 usage: train_paccmann_rl.py [-h]
                             mol_model_path omics_model_path ic50_model_path
                             smiles_language_path omics_data_path params_path
@@ -63,7 +57,7 @@ optional arguments:
   -h, --help            show this help message and exit
 ```
 
-`params_filepath` could point to [examples/example_params.json](examples/example_params.json), examples for other files can be downloaded from [here](https://ibm.box.com/v/paccmann-pytoda-data).
+`params_filepath` could point to [examples/IC50/example_params.json](examples/IC50/example_params.json), examples for other files can be downloaded from [here](https://ibm.box.com/v/paccmann-pytoda-data).
 
 ## References
 

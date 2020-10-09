@@ -83,42 +83,6 @@ class Reinforce(object):
         self.esol = ESOL()
         self.sas = SAS()
         self.lipinski = Lipinski()
-        self.clintox = ClinTox(
-            params.get(
-                'clintox_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'ClinToxMulti'
-                )
-            )
-        )
-        self.sider = SIDER(
-            params.get(
-                'sider_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'Sider'
-                )
-            )
-        )
-        self.tox21 = Tox21(
-            params.get(
-                'tox21_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'Tox21_deepchem'
-                )
-            )
-        )
-        self.organdb = OrganDB(
-            params.get(
-                'organdb_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'Organdb_github'
-                )
-            ), params['site']
-        )
 
         self.update_reward_fn(params)
         # discount factor
@@ -151,17 +115,16 @@ class Reinforce(object):
         Receives a list of SMILES.
         Converts it to a numerical torch Tensor according to smiles_language
         """
-
         if target == 'generator':
             # NOTE: Code for this in the normal REINFORCE class
             raise ValueError('Priming drugs not yet supported')
 
-        # TODO: Workaround since predictor does not understand aromatic carbons
-        smiles_list = [
-            Chem.MolToSmiles(
-                Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-            ).replace(':', '') for s in smiles_list
-        ]
+        # # TODO: Workaround since predictor does not understand aromatic carbons
+        # smiles_list = [
+        #     Chem.MolToSmiles(
+        #         Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+        #     ).replace(':', '') for s in smiles_list
+        # ]
 
         # Convert strings to numbers and padd length.
         smiles_num = [
@@ -248,19 +211,53 @@ class Reinforce(object):
 
     def update_reward_fn(self, params):
         """ Set the reward function
-        
         Arguments:
             params (dict): Hyperparameter for PaccMann reward function
 
 
         """
-        self.qed_weight = params.get('qed_weight', 1.)
-        self.scscore_weight = params.get('scscore_weight', 1.)
-        self.esol_weight = params.get('esol_weight', 1.)
-        self.clintox_weight = params.get('clintox_weight', 1.)
-        self.organdb_weight = params.get('organdb_weight', 1.)
-        self.sider_weight = params.get('sider_weight', 1.)
-        self.tox21_weight = params.get('tox21_weight', 1.)
+        self.clintox_weight = params.get('clintox_weight', 0.)
+        self.organdb_weight = params.get('organdb_weight', 0.)
+        self.sider_weight = params.get('sider_weight', 0.)
+        self.qed_weight = params.get('qed_weight', 0.)
+        self.scscore_weight = params.get('scscore_weight', 0.)
+        self.esol_weight = params.get('esol_weight', 0.)
+
+        self.tox21_weight = params.get('tox21_weight', .5)
+        if self.tox21_weight > 0.:
+            self.tox21 = Tox21(
+                params.get(
+                    'tox21_path',
+                    os.path.join('..', 'data', 'models', 'Tox21')
+                )
+            )
+
+        self.organdb_weight = params.get('organdb_weight', 0.)
+        if self.organdb_weight > 0.:
+            self.organdb = OrganDB(
+                params.get(
+                    'organdb_path',
+                    os.path.join('..', 'data', 'models', 'OrganDB')
+                ), params['site']
+            )
+
+        self.clintox_weight = params.get('clintox_weight', 0.)
+        if self.clintox_weight > 0.:
+            self.clintox = ClinTox(
+                params.get(
+                    'clintox_path',
+                    os.path.join('..', 'data', 'models', 'ClinTox')
+                )
+            )
+
+        self.sider_weight = params.get('sider_weight', 0.)
+        if self.sider_weight > 0.:
+            self.sider = SIDER(
+                params.get(
+                    'sider_path',
+                    os.path.join('..', 'data', 'models', 'Siders')
+                )
+            )
 
     def load(
         self, generator_filepath=None, encoder_filepath=None, *args, **kwargs

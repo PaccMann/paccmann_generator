@@ -7,6 +7,8 @@ dependencies:
   - pip>=19.1
   - pip:
     - pytoda @ git+https://git@github.com/PaccMann/paccmann_datasets@0.1.1
+    - toxsmi @ git+https://git@github.com/PaccMann/toxsmi@0.0.1
+    - paccmann_chemistry @ git+https://git@github.com/PaccMann/paccmann_chemistry@0.0.4
     - numpy>=1.14.3
     - pandas>=0.24.1
     - torch>=1.0.1
@@ -15,5 +17,4 @@ dependencies:
     - six>=1.12.0
     - toxsmi @ git+https://github.com/PaccMann/toxsmi@0.0.1
     - paccmann_predictor @ git+https://github.com/PaccMann/paccmann_predictor@latest #0.0.1
-    - paccmann_chemistry @ git+https://github.com/PaccMann/paccmann_chemistry@latest #0.0.3
     - paccmann_omics @ git+https://github.com/PaccMann/paccmann_omics@latest #0.0.2

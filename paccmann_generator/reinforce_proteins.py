@@ -1,6 +1,5 @@
 """PaccMann^RL: Protein-driven drug generation"""
 import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -26,7 +25,7 @@ class ReinforceProtein(Reinforce):
 
         Args:
             generator (nn.Module): SMILES generator object.
-            encoder (nn.Module): A gene expression encoder (DenseEncoder object)
+            encoder (nn.Module): A protein encoder.
             predictor (nn.Module): A binding affinity predictor
             protein_df (pd.Dataframe): Protein sequences of interest.
             params: dict with hyperparameter.
@@ -189,15 +188,21 @@ class ReinforceProtein(Reinforce):
                 protein sequence or an embedding.
 
         """
-
-        if encoder_uses_sequence or predictor_uses_sequence:
-            protein_sequence = self.protein_df.loc[protein]['sequence']
-            # TODO: This may cause bugs if encoder_uses_sequence is True and
-            # uses another protein language object
-            sequence_tensor = torch.unsqueeze(
+        protein_sequence = self.protein_df.loc[protein]['Sequence']
+        if predictor_uses_sequence:
+            sequence_tensor_p = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
                         self.affinity_predictor.protein_language.
+                        sequence_to_token_indexes(protein_sequence) 
+                    )
+                ), 0
+            )
+        if encoder_uses_sequence:
+            sequence_tensor_e = torch.unsqueeze(
+                self.protein_to_tensor(
+                    self.pad_protein_predictor(
+                        self.encoder.protein_language.
                         sequence_to_token_indexes(protein_sequence)
                     )
                 ), 0
@@ -209,8 +214,8 @@ class ReinforceProtein(Reinforce):
             encoding_tensor = torch.unsqueeze(
                 torch.Tensor(protein_encoding), 0
             )
-        t1 = sequence_tensor if encoder_uses_sequence else encoding_tensor
-        t2 = sequence_tensor if predictor_uses_sequence else encoding_tensor
+        t1 = sequence_tensor_e if encoder_uses_sequence else encoding_tensor
+        t2 = sequence_tensor_p if predictor_uses_sequence else encoding_tensor
         return t1, t2
 
     def generate_compounds_and_evaluate(
@@ -310,13 +315,25 @@ class ReinforceProtein(Reinforce):
         self.affinity_weight = params.get('affinity_weight', 1.)
         self.tox21_weight = params.get('tox21_weight', .5)
 
+        def tox_f(s):
+            x = 0
+            if self.tox21_weight > 0.:
+                x += self.tox21_weight * self.tox21(s)
+            if self.sider_weight > 0.:
+                x += self.sider_weight * self.sider(s)
+            if self.clintox_weight > 0.:
+                x += self.clintox_weight * self.clintox(s)
+            if self.organdb_weight > 0.:
+                x += self.organdb_weight * self.organdb(s)
+            return x
+
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
         self.reward_fn = (
             lambda smiles, protein, valid_idx, batch_size: (
                 self.affinity_weight * self.
                 get_reward_affinity(smiles, protein, valid_idx, batch_size) + np.
-                array([self.tox21_weight * self.tox21(s) for s in smiles])
+                array([tox_f(s) or s in smiles])
             )
         )
 
@@ -473,37 +490,3 @@ class ReinforceProtein(Reinforce):
         self.optimizer.step()
         return summed_reward, rl_loss.item()
 
-    def plot_hist(self, log_preds, cell_line, epoch, batch_size):
-        percentage = np.round(
-            100 * (np.sum(log_preds < 0) / len(log_preds)), 1
-        )
-        self.logger.info(f'Percentage of effective compounds = {percentage}')
-        _ = sns.kdeplot(log_preds, shade=True)
-        plt.axvline(x=0)
-        plt.xlabel('Predicted log(micromolar IC50)', weight='bold', size=12)
-        plt.ylabel(
-            f'Density of molecules (n={batch_size})', weight='bold', size=12
-        )
-        cl = cell_line.replace('_', '-')
-        plt.title(
-            f'Predicted IC50 for compounds generated against {cl}',
-            weight='bold'
-        )
-        valid = f'{round((len(log_preds)/batch_size)*100, 1)}% SMILES validity'
-
-        effect = f'{percentage}% compound efficacy.'
-        plt.text(
-            0.05, 0.9, valid, weight='bold', transform=plt.gca().transAxes
-        )
-        plt.text(
-            0.05, 0.8, effect, weight='bold', transform=plt.gca().transAxes
-        )
-        plt.xlim([-7.5, 7.5])
-
-        plt.savefig(
-            self.model_path +
-            f'/results/ic50_dist_ep_{epoch}_cell_{cell_line}.pdf',
-            dpi=400,
-            bbox_inches='tight'
-        )
-        plt.clf()

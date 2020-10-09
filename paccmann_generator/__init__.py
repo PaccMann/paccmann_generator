@@ -4,4 +4,4 @@ from .reinforce_proteins import ReinforceProtein  # noqa
 from .reinforce_proteins_omics import ReinforceProteinOmics  # noqa
 
 name = 'paccmann_generator'
-__version__ = '0.0.1'
+__version__ = '0.0.2'
