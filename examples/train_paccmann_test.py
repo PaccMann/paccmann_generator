@@ -365,7 +365,6 @@ for epoch in range(1, params['epochs'] + 1):
     ]
     gp_o = predsO[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
     gp_p = predsP[(predsO < learner_combined.ic50_threshold) & (predsP > 0.5)]
-
     for p_o, p_p, s, p, c in zip(gp_o, gp_p, gs, proteins, cell):
         gen_mols.append(s)
         gen_cell.append(c)
@@ -511,9 +510,13 @@ for epoch in range(1, params['epochs'] + 1):
             'IC50': gen_ic50,
             'Binding probability': gen_affinity,
             'mode': modes,
-            'tox21': [learner_combined.tox21(s) for s in gen_mols]
+            'tox21': [learner_combined.tox21(s) for s in gen_mols],
+            'epoch': [epoch]*len(gen_mols), 
+            'validity': [round((len(predsO)/params['batch_size']) * 100, 1)]*len(gen_mols)
         }
     )
+    print(df.head())
+    #1/0
     df.to_csv(os.path.join(learner_combined.model_path, 'results', 'generated.csv'))
     # Plot loss development
     loss_df = pd.DataFrame({'loss': rl_losses, 'rewards': rewards})
@@ -536,7 +539,9 @@ for epoch in range(1, params['epochs'] + 1):
             'SMILES': gen_mols_o,
             'IC50': gen_ic50_o,
             'mode': modes_o,
-            'tox21': [learner_omics.tox21(s) for s in gen_mols_o]
+            'tox21': [learner_omics.tox21(s) for s in gen_mols_o],
+            'epoch': [epoch]*len(gen_mols_o), 
+            'validity': [round((len(preds_o)/params['batch_size']) * 100, 1)]*len(gen_mols_o)
         }
     )
     df.to_csv(os.path.join(learner_omics.model_path, 'results', 'generated.csv'))
@@ -560,7 +565,9 @@ for epoch in range(1, params['epochs'] + 1):
             'protein': gen_prot_p,
             'SMILES': gen_mols_p,
             'Binding probability': gen_affinity_p,
-            'mode': modes_p
+            'mode': modes_p,
+            'epoch': [epoch]*len(gen_mols_p), 
+            'validity': [round((len(preds_p)/params['batch_size']) * 100, 1)]*len(gen_mols_p)
         }
     )
     df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'))
