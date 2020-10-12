@@ -7,9 +7,9 @@
     "learning_rate": 0.000005,
     "gamma": 0.999,
     "clip_grad": 0.1,
-    "epochs": 10,
-    "steps": 5,
+    "epochs": 3,
+    "steps": 2,
     "batch_size": 128,
     "eval_batch_size": 200,
-    "tox21_weight": 0.5
+    "tox21_weight": 0
 }
