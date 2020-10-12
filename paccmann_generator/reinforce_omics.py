@@ -264,7 +264,7 @@ class ReinforceOmic(Reinforce):
             smiles_t, gep_ts[valid_idx]
         )
         log_preds = self.get_log_molar(np.squeeze(pred.detach().numpy()))
-        self.plot_hist(log_preds, cell_line, epoch, batch_size)
+        #self.plot_hist(log_preds, cell_line, epoch, batch_size)
 
         if return_latent:
             return valid_smiles, log_preds, latent_z
