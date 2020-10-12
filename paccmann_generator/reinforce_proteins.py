@@ -188,7 +188,7 @@ class ReinforceProtein(Reinforce):
                 protein sequence or an embedding.
 
         """
-        protein_sequence = self.protein_df.loc[protein]['Sequence']
+        protein_sequence = self.protein_df.loc[protein]['sequence']
         if predictor_uses_sequence:
             sequence_tensor_p = torch.unsqueeze(
                 self.protein_to_tensor(
@@ -333,7 +333,7 @@ class ReinforceProtein(Reinforce):
             lambda smiles, protein, valid_idx, batch_size: (
                 self.affinity_weight * self.
                 get_reward_affinity(smiles, protein, valid_idx, batch_size) + np.
-                array([tox_f(s) or s in smiles])
+                array([tox_f(s) for s in smiles])
             )
         )
 
