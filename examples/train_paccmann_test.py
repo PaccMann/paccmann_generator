@@ -19,13 +19,14 @@ from pytoda.proteins.protein_language import ProteinLanguage
 from paccmann_generator.utils import disable_rdkit_logging
 from paccmann_predictor.models import MODEL_FACTORY as MODEL_FACTORY_OMICS
 import sys
+#sys.path.append('/dataP/tol/paccmann_affinity')
 sys.path.append('/home/tol/paccmann_affinity')
 from paccmann_affinity.models.predictors import MODEL_FACTORY as MODEL_FACTORY_PROTEIN
 
 from paccmann_generator.reinforce_proteins_omics import ReinforceProteinOmics
 from paccmann_generator import ReinforceOmic
 from paccmann_generator.reinforce_proteins import ReinforceProtein
-from files import *
+from files)cluster import *
 
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -515,8 +516,6 @@ for epoch in range(1, params['epochs'] + 1):
             'validity': [round((len(predsO)/params['batch_size']) * 100, 1)]*len(gen_mols)
         }
     )
-    print(df.head())
-    #1/0
     df.to_csv(os.path.join(learner_combined.model_path, 'results', 'generated.csv'))
     # Plot loss development
     loss_df = pd.DataFrame({'loss': rl_losses, 'rewards': rewards})
