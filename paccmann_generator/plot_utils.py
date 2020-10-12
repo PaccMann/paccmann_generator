@@ -233,7 +233,7 @@ def plot_and_compare_proteins(
     plt.savefig(
         os.path.join(
             save_path,
-            f'results/{mode}_{protein}_epoch_{epoch}_eff_{biased_ratio}.pdf'
+            f'results/{mode}_epoch_{epoch}_eff_{biased_ratio}.pdf'
         )
     )
     plt.clf()
