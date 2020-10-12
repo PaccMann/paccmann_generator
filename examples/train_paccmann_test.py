@@ -306,12 +306,16 @@ for epoch in range(1, params['epochs'] + 1):
 
     for step in range(1, params['steps'] + 1):
 
-        # Randomly sample a cell line:
-        cell_line = [np.random.choice(train_omics)]
-        print(f'Current train cell_line: {cell_line}')
+        # Randomly sample a cell lines and proteins for training:
+        cell_line = np.random.choice(train_omics, size = 20, replace=True)
+        cell_line = [str(i) for i in cell_line]
+        protein_name = np.random.choice(test_protein.index, size = 20, replace=False)
+        protein_name = [str(i) for i in protein_name]
+        #cell_line = [np.random.choice(train_omics)]
+        print(f'Current train cell_lines: {cell_line}')
         # Randomly sample a protein
-        protein_name = [np.random.choice(train_protein.index)]
-        print(f'Current train protein: {protein_name}')
+        #protein_name = [np.random.choice(train_protein.index)]
+        print(f'Current train proteins: {protein_name}')
 
         rew, loss = learner_combined.policy_gradient(
             protein_name, cell_line, epoch, params['batch_size']
