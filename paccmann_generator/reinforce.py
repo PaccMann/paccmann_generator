@@ -145,7 +145,7 @@ class Reinforce(object):
         smiles_tensor = torch.cat(smiles_num, dim=0)
         return smiles_tensor
 
-    def get_smiles_from_latent(self, latent, remove_invalid=True):
+    def get_smiles_from_latent(self, latent, remove_invalid=False):
         """
         Takes some samples from latent space.
         Args:
@@ -191,7 +191,7 @@ class Reinforce(object):
             for sm in smiles_num_tuple
         ]
 
-        imgs = [Chem.MolFromSmiles(s, sanitize=True) for s in smiles]
+        imgs = [Chem.MolFromSmiles(s, sanitize=False) for s in smiles]
         valid_idxs = [ind for ind in range(len(imgs)) if imgs[ind] is not None]
 
         smiles = [
