@@ -175,7 +175,7 @@ class ReinforceOmic(Reinforce):
         cell_line=None,
         primed_drug=' ',
         return_latent=False,
-        remove_invalid=True
+        remove_invalid=False
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -397,7 +397,7 @@ class ReinforceOmic(Reinforce):
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=True
+            latent_z, remove_invalid=False
         )
 
         # Get rewards (list, one reward for each valid smiles)
