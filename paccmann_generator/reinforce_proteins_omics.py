@@ -12,6 +12,7 @@ from pytoda.transforms import LeftPadding, ToTensor
 from .drug_evaluators import (
     QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
 )
+from .deepset import ravanbakhsh_set_layer
 from .reinforce import Reinforce
 
 
@@ -300,7 +301,7 @@ class ReinforceProteinOmics(Reinforce):
         cell_line=None,
         primed_drug=' ',
         return_latent=False,
-        remove_invalid=True
+        remove_invalid=False
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -500,9 +501,10 @@ class ReinforceProteinOmics(Reinforce):
             list: a list of the fractions of C atmons per molecule.
         """
         tot = []
-        for s in smiles:
-            C = [1 for i in s if i=='C'].count(1)
-            tot.append(C/len(s))
+        if smiles:
+            for s in smiles:
+                C = [1 for i in s if i=='C'].count(1)
+                tot.append(C/len(s)) #get sometimes a div by 0 error
         return tot
 
     def get_reward(self, valid_smiles, protein, cell_line, idx, batch_size):
@@ -654,13 +656,15 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_mean(latent_z_omics, latent_z_protein)
+        return self.together_concat(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
         return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
 
     def together_concat(self, latent_z_omics, latent_z_protein):
-        return torch.cat((latent_z_protein, latent_z_omics),2)
+        latent_z_long = torch.cat((latent_z_protein, latent_z_omics),2).transpose(2,1)
+        latent_z = ravanbakhsh_set_layer(latent_z_omics.size()[2], latent_z_long).transpose(2,1)
+        return latent_z
 
     def policy_gradient(self, protein, cell_line, epoch, batch_size=10):
         """
@@ -688,7 +692,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=True
+            latent_z, remove_invalid=False
         )
 
         # Get rewards (list, one reward for each valid smiles)
