@@ -225,7 +225,7 @@ class ReinforceProtein(Reinforce):
         protein=None,
         primed_drug=' ',
         return_latent=False,
-        remove_invalid=True
+        remove_invalid=False
     ):
         """
         Generate some compounds and evaluate them with the predictor
