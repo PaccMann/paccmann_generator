@@ -16,7 +16,7 @@ from .reinforce import Reinforce
 class ReinforceOmic(Reinforce):
 
     def __init__(
-        self, generator, encoder, predictor, gep_df, params, generator_smiles_language, model_name, logger
+        self, generator, encoder, predictor, gep_df, params, generator_smiles_language, model_name, logger, remove_invalid
     ):
         """
         Constructor for the Reinforcement object.
@@ -39,7 +39,7 @@ class ReinforceOmic(Reinforce):
         """
 
         super(ReinforceOmic, self).__init__(
-            generator, encoder, params, model_name, logger
+            generator, encoder, params, model_name, logger, remove_invalid
         )  # yapf: disable
 
         self.predictor = predictor
@@ -53,6 +53,8 @@ class ReinforceOmic(Reinforce):
 
         self.gep_df = gep_df
         self.update_params(params)
+
+        self.remove_invalid = remove_invalid
 
     def update_params(self, params):
         """Update parameter
@@ -174,8 +176,7 @@ class ReinforceOmic(Reinforce):
         batch_size,
         cell_line=None,
         primed_drug=' ',
-        return_latent=False,
-        remove_invalid=False
+        return_latent=False
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -254,7 +255,7 @@ class ReinforceOmic(Reinforce):
 
         # Generate drugs
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=remove_invalid
+            latent_z
         )
 
         smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
@@ -397,7 +398,7 @@ class ReinforceOmic(Reinforce):
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=False
+            latent_z
         )
 
         # Get rewards (list, one reward for each valid smiles)
