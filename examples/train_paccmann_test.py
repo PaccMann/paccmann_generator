@@ -346,7 +346,7 @@ for epoch in range(1, params['epochs'] + 1):
         losses_o.append(loss_o)
 
     # Save model
-    learner_combined.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
+    learner_combined.save(f'gen_{epoch}.pt', f'enc_{epoch}_protein.pt', f'enc_{epoch}_omics.pt')
     learner_omics.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
     learner_protein.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
     unbiased_predsP = unbiased_preds_df[protein_name].values.reshape(-1)[:params['batch_size']]
