@@ -158,6 +158,7 @@ def plot_and_compare_proteins(
 def plot_loss(
     loss, reward, epoch, save_path, rolling=1, site='unknown'
 ):
+    idx = np.argmax(reward)
     loss = pd.Series(loss).rolling(rolling).mean()
     rewards = pd.Series(reward).rolling(rolling).mean()
 
@@ -170,7 +171,7 @@ def plot_loss(
     #_ = cell_line.replace('_', ' ')
     plt.plot(np.arange(len(rewards)), rewards, color='g')
     plt.ylabel('Achieved rewards', size=12).set_color('g')
-    plt.title('PaccMann$^{\mathrm{RL}}$ generator for ' + s + ' cancer')
+    plt.title('PaccMann$^{\mathrm{RL}}$ \max reward at epoch:'+ str(int(idx/5)+1))
     plt.savefig(
         os.path.join(save_path, f'results/loss_ep_{epoch}')
     )
