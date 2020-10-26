@@ -18,7 +18,7 @@ class ReinforceProtein(Reinforce):
 
     def __init__(
         self, generator, encoder, predictor, protein_df, params, generator_smiles_language, model_name,
-        logger
+        logger, remove_invalid
     ):
         """
         Constructor for the Reinforcement object.
@@ -39,7 +39,7 @@ class ReinforceProtein(Reinforce):
         """
 
         super(ReinforceProtein, self).__init__(
-            generator, encoder, params, model_name, logger
+            generator, encoder, params, model_name, logger, remove_invalid
         )  # yapf: disable
 
         self.affinity_predictor = predictor
@@ -60,6 +60,8 @@ class ReinforceProtein(Reinforce):
 
         self.protein_to_tensor = ToTensor(self.device)
         self.update_params(params)
+
+        self.remove_invalid = remove_invalid
 
         self.tox21 = Tox21(
             params.get(
@@ -224,8 +226,7 @@ class ReinforceProtein(Reinforce):
         batch_size,
         protein=None,
         primed_drug=' ',
-        return_latent=False,
-        remove_invalid=False
+        return_latent=False
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -286,7 +287,7 @@ class ReinforceProtein(Reinforce):
 
         # Generate drugs
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=remove_invalid
+            latent_z
         )
 
         smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
@@ -396,11 +397,18 @@ class ReinforceProtein(Reinforce):
             raise ValueError('Priming drugs not yet supported')
 
         # TODO: Workaround since predictor does not understand aromatic carbons
-        smiles_list = [
-            Chem.MolToSmiles(
-                Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-            ).replace(':', '') for s in smiles_list
-        ]
+        if self.remove_invalid:
+            smiles_list = [
+                Chem.MolToSmiles(
+                    Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
+                ).replace(':', '') for s in smiles_list
+            ]
+        else:
+            smiles_list = [
+                Chem.MolToSmiles(
+                    Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+                ).replace(':', '') for s in smiles_list
+            ]
 
         # Convert strings to numbers and padd length.
         smiles_num = [
@@ -441,7 +449,7 @@ class ReinforceProtein(Reinforce):
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=True
+            latent_z
         )
 
         # Get rewards (list, one reward for each valid smiles)
