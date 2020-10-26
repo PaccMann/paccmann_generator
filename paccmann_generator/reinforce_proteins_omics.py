@@ -439,6 +439,7 @@ class ReinforceProteinOmics(Reinforce):
         else:
             return valid_smiles, predP, log_predsO, valid_idx
 
+
     def update_reward_fn(self, params):
         """ Set the reward function
         
@@ -787,3 +788,37 @@ class ReinforceProteinOmics(Reinforce):
             bbox_inches='tight'
         )
         plt.clf()
+
+    def load(
+        self, generator_filepath=None, encoder_filepath_protein=None, encoder_filepath_omics=None, *args, **kwargs
+    ):
+        """Load Model From Path."""
+        if generator_filepath is not None:
+            self.generator.load(
+                self.weights_path.format(generator_filepath), *args, **kwargs
+            )
+        if encoder_filepath_protein is not None:
+            self.encoder.load(
+                self.weights_path.format(encoder_filepath_protein), *args, **kwargs
+            )
+        if encoder_filepath_omics is not None:
+            self.encoderOmics.load(
+                self.weights_path.format(encoder_filepath_omics), *args, **kwargs
+            )
+
+    def save(
+        self, generator_filepath=None, encoder_filepath_protein=None, encoder_filepath_omics=None, *args, **kwargs
+    ):
+        """Save Model to Path."""
+        if generator_filepath is not None:
+            self.generator.save(
+                self.weights_path.format(generator_filepath), *args, **kwargs
+            )
+        if encoder_filepath_omics is not None:
+            self.encoderOmics.save(
+                self.weights_path.format(encoder_filepath_omics), *args, **kwargs
+            )
+        if encoder_filepath_protein is not None:
+            self.encoder.save(
+                self.weights_path.format(encoder_filepath_protein), *args, **kwargs
+            )
