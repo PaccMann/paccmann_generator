@@ -5,7 +5,14 @@ __pycache__/
 
 *.DS_Store
 
+/models
 /biased_models
+/results
+/notebooks
+
+# Result files
+*.csv
+*.smi
 
 # C extensions
 *.so
@@ -106,5 +113,3 @@ venv.bak/
 
 # mypy
 .mypy_cache/
-
-/results
