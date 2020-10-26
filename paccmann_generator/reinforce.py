@@ -13,7 +13,7 @@ from paccmann_chemistry.utils.search import SamplingSearch
 
 class Reinforce(object):
 
-    def __init__(self, generator, encoder, params, model_name, logger):
+    def __init__(self, generator, encoder, params, model_name, logger, remove_invalid):
         """
         Constructor for the Reinforcement object.
 
@@ -55,6 +55,8 @@ class Reinforce(object):
         self.weights_path = os.path.join(self.model_path, 'weights/{}')
 
         self.smiles_to_tensor = ToTensor(self.device)
+
+        self.remove_invalid = remove_invalid
 
         # If model does not yet exist, create it.
         if not os.path.isdir(self.model_path):
@@ -145,7 +147,7 @@ class Reinforce(object):
         smiles_tensor = torch.cat(smiles_num, dim=0)
         return smiles_tensor
 
-    def get_smiles_from_latent(self, latent, remove_invalid=False):
+    def get_smiles_from_latent(self, latent):
         """
         Takes some samples from latent space.
         Args:
@@ -190,17 +192,19 @@ class Reinforce(object):
             self.generator_smiles_language.selfies_to_smiles(sm[0])
             for sm in smiles_num_tuple
         ]
-
-        imgs = [Chem.MolFromSmiles(s, sanitize=False) for s in smiles]
+        if self.remove_invalid:
+            imgs = [Chem.MolFromSmiles(s, sanitize=True) for s in smiles]
+        else:
+            imgs = [Chem.MolFromSmiles(s, sanitize=False) for s in smiles]
         valid_idxs = [ind for ind in range(len(imgs)) if imgs[ind] is not None]
 
         smiles = [
             smiles[ind] for ind in range(len(imgs))
-            if not (remove_invalid and imgs[ind] is None)
+            if not (self.remove_invalid and imgs[ind] is None)
         ]
         nums = [
             numericals[ind] for ind in range(len(numericals))
-            if not (remove_invalid and imgs[ind] is None)
+            if not (self.remove_invalid and imgs[ind] is None)
         ]
 
         self.logger.info(
