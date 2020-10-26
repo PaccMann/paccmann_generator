@@ -268,7 +268,7 @@ class Reinforce(object):
     ):
         """Load Model From Path."""
         if generator_filepath is not None:
-            self.generator.load_model(
+            self.generator.load(
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath is not None:
