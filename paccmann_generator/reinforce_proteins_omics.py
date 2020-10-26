@@ -19,7 +19,7 @@ from .reinforce import Reinforce
 class ReinforceProteinOmics(Reinforce):
 
     def __init__(
-        self, generator, encoderProtein, encoderOmics, affinity_predictor, 
+        self, generator, encoder_protein, encoder_omics, affinity_predictor, 
         efficacy_predictor, protein_df, gep_df, params, generator_smiles_language, model_name, logger, remove_invalid
     ):
         """
@@ -27,8 +27,8 @@ class ReinforceProteinOmics(Reinforce):
 
         Args:
             generator (nn.Module): SMILES generator object.
-            encoderProtein (nn.Module): A protein encoder (DenseEncoder object)
-            encoderOmics (nn.Module): A gene expression encoder (DenseEncoder object)
+            encoder_protein (nn.Module): A protein encoder (DenseEncoder object)
+            encoder_omics (nn.Module): A gene expression encoder (DenseEncoder object)
             affinity_predictor (nn.Module): A binding affinity predictor
             efficacy_predictor: A IC50 predictor, i.e. PaccMann (MCA object).
             protein_df (pd.Dataframe): Protein sequences of interest.
@@ -46,11 +46,11 @@ class ReinforceProteinOmics(Reinforce):
         """
 
         super(ReinforceProteinOmics, self).__init__(
-            generator, encoderProtein, params, model_name, logger, remove_invalid
+            generator, encoder_protein, params, model_name, logger, remove_invalid
         )  # yapf: disable
 
-        self.encoderOmics = encoderOmics
-        self.encoderOmics.eval()
+        self.encoder_omics = encoder_omics
+        self.encoder_omics.eval()
 
         self.protein_df = protein_df
         
@@ -193,7 +193,7 @@ class ReinforceProteinOmics(Reinforce):
                 0
             )
             #gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-            cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+            cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
             cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
             cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
         #gep_ts = torch.as_tensor(gep_ts)
@@ -323,7 +323,7 @@ class ReinforceProteinOmics(Reinforce):
         self.affinity_predictor.eval()
         self.efficacy_predictor.eval()
         self.encoder.eval()
-        self.encoderOmics.eval()
+        self.encoder_omics.eval()
         self.generator.eval()
 
         if protein is None:
@@ -386,7 +386,7 @@ class ReinforceProteinOmics(Reinforce):
                     0
                 )
                 gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-                cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+                cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
                 #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
                 cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
                 cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
@@ -403,7 +403,7 @@ class ReinforceProteinOmics(Reinforce):
                 cell_logvar = cell_logvar[:batch_size]
                 gep_ts = gep_ts[:batch_size]
             #print("second size:", cell_mu_batch.size(), cell_mu_batch)
-            #cell_mu, cell_logvar = self.encoderOmics(gep_t)
+            #cell_mu, cell_logvar = self.encoder_omics(gep_t)
             latent_z_omics = torch.unsqueeze(
                 self.reparameterize(
                     cell_mu_batch,
@@ -439,6 +439,127 @@ class ReinforceProteinOmics(Reinforce):
         else:
             return valid_smiles, predP, log_predsO, valid_idx
 
+    def generate_compounds(
+        self,
+        batch_size,
+        protein=None,
+        cell_line=None,
+        primed_drug=' ',
+        return_latent=False
+    ):
+        """
+        Generate some compounds and evaluate them with the predictor
+
+        Args:
+            batch_size (int): The batch size.
+            protein (str): A string, the protein used to drive generator.
+            cell_line (str): A string, the cell_line used to drive generator.
+            primed_drug (str): SMILES string to prime the generator.
+
+        Returns:
+            np.array: Predictions from PaccMann.
+        """
+        if primed_drug != ' ':
+            raise ValueError('Drug priming not yet supported.')
+
+        self.affinity_predictor.eval()
+        self.efficacy_predictor.eval()
+        self.encoder.eval()
+        self.encoder_omics.eval()
+        self.generator.eval()
+
+        if protein is None:
+            # Generate a random molecule
+            latent_z_protein = torch.randn(
+                1, batch_size, self.generator.decoder.latent_dim
+            )
+        else:
+            #protein
+            protein_mu = []
+            protein_logvar = []
+            protein_predictor_tensor = []
+            for prot in protein:
+                protein_encoder_tensor, protein_predictor_tensor_i = (
+                    self.protein_to_numerical(
+                        prot, encoder_uses_sequence=False, predictor_uses_sequence=True
+                    )
+                )
+                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_predictor_tensor.append(torch.unsqueeze(protein_predictor_tensor_i, 0).detach().numpy()[0][0])
+                protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
+                protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
+            protein_mu = torch.as_tensor(protein_mu)
+            protein_logvar = torch.as_tensor(protein_logvar)
+            protein_predictor_tensor = torch.as_tensor(protein_predictor_tensor)
+            
+            protein_mu_batch = protein_mu.repeat(batch_size, 1)
+            protein_logvar = protein_logvar.repeat(batch_size, 1)
+            protein_predictor_tensor = protein_predictor_tensor.repeat(batch_size, 1)
+            if protein_mu_batch.size()[0]>batch_size:
+                protein_mu_batch = protein_mu_batch[:batch_size]
+                protein_logvar = protein_logvar[:batch_size]
+                protein_predictor_tensor = protein_predictor_tensor[:batch_size]
+            
+            latent_z_protein = torch.unsqueeze(
+                self.reparameterize(
+                    protein_mu_batch,
+                    protein_logvar
+                ), 0
+            )
+        if cell_line is None:
+            # Generate a random molecule
+            latent_z_omics = torch.randn(
+                1, batch_size, self.generator.decoder.latent_dim
+            )
+        else:
+            #cell:
+            #print(cell_line)
+            #print(np.sum(self.gep_df['cell_line'].isin(cell_line)), "iloc0 \n", self.gep_df[self.gep_df['cell_line'].isin(cell_line)]['gene_expression'])
+            cell_mu = []
+            cell_logvar = []
+            gep_ts = []
+            for cell in cell_line:
+                gep_t = torch.unsqueeze(
+                    torch.Tensor(
+                        self.gep_df[
+                            self.gep_df['cell_line'] == cell  # yapf: disable
+                        ].iloc[0].gene_expression.values
+                    ),
+                    0
+                )
+                gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+                cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
+                #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
+                cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
+                cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
+            gep_ts = torch.as_tensor(gep_ts)
+            cell_mu = torch.as_tensor(cell_mu)
+            cell_logvar = torch.as_tensor(cell_logvar)
+            #print("before", cell_mu.size())
+            #print(cell_mu)
+            cell_mu_batch = cell_mu.repeat(batch_size, 1)
+            cell_logvar = cell_logvar.repeat(batch_size, 1)
+            gep_ts = gep_ts.repeat(batch_size, 1)
+            if cell_mu_batch.size()[0]>batch_size:
+                cell_mu_batch = cell_mu_batch[:batch_size]
+                cell_logvar = cell_logvar[:batch_size]
+                gep_ts = gep_ts[:batch_size]
+            #print("second size:", cell_mu_batch.size(), cell_mu_batch)
+            #cell_mu, cell_logvar = self.encoder_omics(gep_t)
+            latent_z_omics = torch.unsqueeze(
+                self.reparameterize(
+                    cell_mu_batch,
+                    cell_logvar
+                ), 0
+            )
+            
+        latent_z =self.together(latent_z_omics, latent_z_protein)
+
+        # Generate drugs
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
+            latent_z
+        )
+        return valid_smiles, valid_idx
 
     def update_reward_fn(self, params):
         """ Set the reward function
@@ -720,7 +841,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Batch processing
         lrps = 1
-        if self.generator.decoder.latent_dim == 2 * self.encoderOmics.latent_size:
+        if self.generator.decoder.latent_dim == 2 * self.encoder_omics.latent_size:
             lrps = 2
         hidden = self.generator.decoder.latent_to_hidden(
             latent_z.repeat(
@@ -749,7 +870,7 @@ class ReinforceProteinOmics(Reinforce):
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
                 list(self.generator.decoder.parameters()) + list(self.encoder.parameters()) +
-                list(self.encoderOmics.parameters()), self.grad_clipping
+                list(self.encoder_omics.parameters()), self.grad_clipping
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item()
@@ -802,7 +923,7 @@ class ReinforceProteinOmics(Reinforce):
                 self.weights_path.format(encoder_filepath_protein), *args, **kwargs
             )
         if encoder_filepath_omics is not None:
-            self.encoderOmics.load(
+            self.encoder_omics.load(
                 self.weights_path.format(encoder_filepath_omics), *args, **kwargs
             )
 
@@ -815,7 +936,7 @@ class ReinforceProteinOmics(Reinforce):
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath_omics is not None:
-            self.encoderOmics.save(
+            self.encoder_omics.save(
                 self.weights_path.format(encoder_filepath_omics), *args, **kwargs
             )
         if encoder_filepath_protein is not None:
