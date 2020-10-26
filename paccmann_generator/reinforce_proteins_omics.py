@@ -20,7 +20,7 @@ class ReinforceProteinOmics(Reinforce):
 
     def __init__(
         self, generator, encoderProtein, encoderOmics, affinity_predictor, 
-        efficacy_predictor, protein_df, gep_df, params, generator_smiles_language, model_name, logger
+        efficacy_predictor, protein_df, gep_df, params, generator_smiles_language, model_name, logger, remove_invalid
     ):
         """
         Constructor for the Reinforcement object.
@@ -46,7 +46,7 @@ class ReinforceProteinOmics(Reinforce):
         """
 
         super(ReinforceProteinOmics, self).__init__(
-            generator, encoderProtein, params, model_name, logger
+            generator, encoderProtein, params, model_name, logger, remove_invalid
         )  # yapf: disable
 
         self.encoderOmics = encoderOmics
@@ -81,6 +81,8 @@ class ReinforceProteinOmics(Reinforce):
 
         self.generator_smiles_language = generator_smiles_language
 
+        self.remove_invalid = remove_invalid
+
         self.tox21 = Tox21(
             params.get(
                 'tox21_path',
@@ -107,7 +109,7 @@ class ReinforceProteinOmics(Reinforce):
         self.ic50_threshold = params.get('IC50_threshold', 0.0)
         # rewards for efficient and all other valid molecules
         self.rewards = params.get('rewards', (11, 1))
-        self.C_frac_weight = params.get('C_frac_weight', 0.2)
+        self.C_frac_weight = params.get('C_frac_weight', 0)
         self.C_frac = params.get('C_frac', 0.8)
 
     def update_new_params(self, params):
@@ -300,8 +302,7 @@ class ReinforceProteinOmics(Reinforce):
         protein=None,
         cell_line=None,
         primed_drug=' ',
-        return_latent=False,
-        remove_invalid=False
+        return_latent=False
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -414,7 +415,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Generate drugs
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=remove_invalid
+            latent_z
         )
 
         smiles_t_affinity = self.smiles_to_numerical(valid_smiles, target='affinity')
@@ -449,8 +450,8 @@ class ReinforceProteinOmics(Reinforce):
         super().update_reward_fn(params)
         self.paccmann_weight = params.get('paccmann_weight', 1.)
         self.affinity_weight = params.get('affinity_weight', 1.)
-        self.C_frac_weight = params.get('C_frac_weight', .5)
-        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + self.qed_weight + self.scscore_weight + self. esol_weight + self.C_frac_weight
+        self.C_frac_weight = params.get('C_frac_weight', 0)
+        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + self.qed_weight + self.scscore_weight + self.esol_weight
         
         def tox_f(s):
             x = 0
@@ -465,6 +466,9 @@ class ReinforceProteinOmics(Reinforce):
             if self.organdb_weight > 0.:
                 x += self.organdb_weight * self.organdb(s)
                 self.weight_tot += self.organdb_weight
+            if self.C_frac_weight > 0.:
+                x += self.C_frac_weight * self.get_C_fraction(s)
+                self.weight_tot += -np.absolut(self.C_frac - self.C_frac_weight)
             return x
 
         # This is the joint reward function. Each score is normalized to be
@@ -484,9 +488,8 @@ class ReinforceProteinOmics(Reinforce):
                         #self.clintox_weight * self.clintox(s) +
                         #self.organdb_weight * self.organdb(s) for s in smiles
                         tox_f(s) for s in smiles
-                    ] -
+                    ]
                     # minimize the difference of fraction of C to C_frac
-                    self.C_frac_weight / self.weight_tot *  np.abs(np.subtract([self.C_frac]*len(smiles), self.get_C_fraction(smiles)))
                 )
             )
         )
@@ -503,8 +506,9 @@ class ReinforceProteinOmics(Reinforce):
         tot = []
         if smiles:
             for s in smiles:
-                C = [1 for i in s if i=='C'].count(1)
-                tot.append(C/len(s)) #get sometimes a div by 0 error
+                if len(s) is not 0:
+                    C = [1 for i in s if i=='C'].count(1)
+                    tot.append(C/len(s)) #get sometimes a div by 0 error
         return tot
 
     def get_reward(self, valid_smiles, protein, cell_line, idx, batch_size):
@@ -566,11 +570,19 @@ class ReinforceProteinOmics(Reinforce):
             raise ValueError('Priming drugs not yet supported')
 
         # TODO: Workaround since predictor does not understand aromatic carbons
-        smiles_list = [
-            Chem.MolToSmiles(
-                Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-            ).replace(':', '') for s in smiles_list
-        ]
+        
+        if self.remove_invalid:
+            smiles_list = [
+                Chem.MolToSmiles(
+                        Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
+                ).replace(':', '') for s in smiles_list
+            ]
+        else:
+            smiles_list = [
+                Chem.MolToSmiles(
+                        Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+                ).replace(':', '') for s in smiles_list
+            ]
 
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
@@ -656,7 +668,7 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_concat(latent_z_omics, latent_z_protein)
+        return self.together_mean(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
         return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
@@ -692,7 +704,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
-            latent_z, remove_invalid=False
+            latent_z
         )
 
         # Get rewards (list, one reward for each valid smiles)
