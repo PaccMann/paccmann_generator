@@ -23,8 +23,8 @@
     "organdb_weight": 0,
     "sider_weight": 0,
     "tox21_weight": 0,
-    "tox21_path":"/dataP/tol/ClinToxMulti",
-    "organdb_path":"/dataP/tol/Organdb_github",
-    "clintox_path":"/dataP/tol/ClinToxMulti",
-    "sider_path":"/dataP/tol/Sider"
+    "tox21_path":"/mnt/c/ClinToxMulti",
+    "organdb_path":"/mnt/c/Organdb_github",
+    "clintox_path":"/mnt/c/ClinToxMulti",
+    "sider_path":"/mnt/c/Sider"
 }
