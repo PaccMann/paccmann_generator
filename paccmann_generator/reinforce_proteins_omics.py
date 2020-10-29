@@ -714,7 +714,7 @@ class ReinforceProteinOmics(Reinforce):
                         Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
                 ).replace(':', '') for s in smiles_list
             ]
-
+        
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
             smiles_num = [
