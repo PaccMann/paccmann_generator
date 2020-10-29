@@ -55,12 +55,12 @@ class ReinforceProteinOmics(Reinforce):
         #a= list(self.generator.decoder.parameters())
         #a.extend(list(self.encoder.encoding.parameters()))
         #a.extend(list(self.encoder_omics.encoding.parameters()))
-        self.optimizer = torch.optim.Adam(
-            list(self.generator.decoder.parameters(),
-            lr=params.get('learning_rate', 0.0001),
-            eps=params.get('eps', 0.0001),
-            weight_decay=params.get('weight_decay', 0.00001)
-        )
+        #self.optimizer = torch.optim.Adam(
+         #   list(self.generator.decoder.parameters(),
+          #  lr=params.get('learning_rate', 0.0001),
+           # eps=params.get('eps', 0.0001),
+            #weight_decay=params.get('weight_decay', 0.00001)
+        #)
 
         self.protein_df = protein_df
         
@@ -702,34 +702,18 @@ class ReinforceProteinOmics(Reinforce):
             raise ValueError('Priming drugs not yet supported')
 
         # TODO: Workaround since predictor does not understand aromatic carbons
-        '''
         if self.remove_invalid:
-            smiles_list = [Chem.MolToSmiles(
-                            Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
-                    ).replace(':', '') for s in smiles_list]
-            
-            smiles_list_new = []
-            for s in smiles_list:
-                try:
-                    smiles_list_new.append(Chem.MolToSmiles(
-                            Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
-                    ).replace(':', ''))
-                except:
-                    print("error occured in smiles", s)
+            smiles_list = [
+                Chem.MolToSmiles(
+                        Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
+                ).replace(':', '') for s in smiles_list
+            ]
         else:
-            smiles_list = [Chem.MolToSmiles(
-                            Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-                    ).replace(':', '') for s in smiles_list]
-        
-            smiles_list_new = []
-            for s in smiles_list:
-                try:
-                    smiles_list_new.append(Chem.MolToSmiles(
-                            Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-                    ).replace(':', ''))
-                except:
-                    print("error occured in smiles", s)
-        smiles_list = smiles_list_new'''
+            smiles_list = [
+                Chem.MolToSmiles(
+                        Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+                ).replace(':', '') for s in smiles_list
+            ]
 
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
