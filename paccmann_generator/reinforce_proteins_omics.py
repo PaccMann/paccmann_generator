@@ -52,11 +52,11 @@ class ReinforceProteinOmics(Reinforce):
         self.encoder_omics = encoder_omics
         self.encoder_omics.eval()
 
-        a= list(self.generator.decoder.parameters())
-        a.extend(list(self.encoder.encoding.parameters()))
-        a.extend(list(self.encoder_omics.encoding.parameters()))
+        #a= list(self.generator.decoder.parameters())
+        #a.extend(list(self.encoder.encoding.parameters()))
+        #a.extend(list(self.encoder_omics.encoding.parameters()))
         self.optimizer = torch.optim.Adam(
-            a,
+            list(self.generator.decoder.parameters(),
             lr=params.get('learning_rate', 0.0001),
             eps=params.get('eps', 0.0001),
             weight_decay=params.get('weight_decay', 0.00001)
@@ -730,7 +730,7 @@ class ReinforceProteinOmics(Reinforce):
                 except:
                     print("error occured in smiles", s)
         smiles_list = smiles_list_new'''
-        
+
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
             smiles_num = [
