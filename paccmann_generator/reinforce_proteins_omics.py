@@ -19,7 +19,7 @@ from .reinforce import Reinforce
 class ReinforceProteinOmics(Reinforce):
 
     def __init__(
-        self, generator, encoderProtein, encoderOmics, affinity_predictor, 
+        self, generator, encoder_protein, encoder_omics, affinity_predictor, 
         efficacy_predictor, protein_df, gep_df, params, generator_smiles_language, model_name, logger, remove_invalid
     ):
         """
@@ -27,8 +27,8 @@ class ReinforceProteinOmics(Reinforce):
 
         Args:
             generator (nn.Module): SMILES generator object.
-            encoderProtein (nn.Module): A protein encoder (DenseEncoder object)
-            encoderOmics (nn.Module): A gene expression encoder (DenseEncoder object)
+            encoder_protein (nn.Module): A protein encoder (DenseEncoder object)
+            encoder_omics (nn.Module): A gene expression encoder (DenseEncoder object)
             affinity_predictor (nn.Module): A binding affinity predictor
             efficacy_predictor: A IC50 predictor, i.e. PaccMann (MCA object).
             protein_df (pd.Dataframe): Protein sequences of interest.
@@ -46,11 +46,21 @@ class ReinforceProteinOmics(Reinforce):
         """
 
         super(ReinforceProteinOmics, self).__init__(
-            generator, encoderProtein, params, model_name, logger, remove_invalid
+            generator, encoder_protein, params, model_name, logger, remove_invalid
         )  # yapf: disable
 
-        self.encoderOmics = encoderOmics
-        self.encoderOmics.eval()
+        self.encoder_omics = encoder_omics
+        self.encoder_omics.eval()
+
+        a= list(self.generator.decoder.parameters())
+        a.extend(list(self.encoder.encoding.parameters()))
+        a.extend(list(self.encoder_omics.encoding.parameters()))
+        self.optimizer = torch.optim.Adam(
+            a,
+            lr=params.get('learning_rate', 0.0001),
+            eps=params.get('eps', 0.0001),
+            weight_decay=params.get('weight_decay', 0.00001)
+        )
 
         self.protein_df = protein_df
         
@@ -193,7 +203,7 @@ class ReinforceProteinOmics(Reinforce):
                 0
             )
             #gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-            cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+            cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
             cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
             cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
         #gep_ts = torch.as_tensor(gep_ts)
@@ -323,7 +333,7 @@ class ReinforceProteinOmics(Reinforce):
         self.affinity_predictor.eval()
         self.efficacy_predictor.eval()
         self.encoder.eval()
-        self.encoderOmics.eval()
+        self.encoder_omics.eval()
         self.generator.eval()
 
         if protein is None:
@@ -386,7 +396,7 @@ class ReinforceProteinOmics(Reinforce):
                     0
                 )
                 gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-                cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+                cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
                 #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
                 cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
                 cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
@@ -403,7 +413,7 @@ class ReinforceProteinOmics(Reinforce):
                 cell_logvar = cell_logvar[:batch_size]
                 gep_ts = gep_ts[:batch_size]
             #print("second size:", cell_mu_batch.size(), cell_mu_batch)
-            #cell_mu, cell_logvar = self.encoderOmics(gep_t)
+            #cell_mu, cell_logvar = self.encoder_omics(gep_t)
             latent_z_omics = torch.unsqueeze(
                 self.reparameterize(
                     cell_mu_batch,
@@ -465,7 +475,7 @@ class ReinforceProteinOmics(Reinforce):
         self.affinity_predictor.eval()
         self.efficacy_predictor.eval()
         self.encoder.eval()
-        self.encoderOmics.eval()
+        self.encoder_omics.eval()
         self.generator.eval()
 
         if protein is None:
@@ -528,7 +538,7 @@ class ReinforceProteinOmics(Reinforce):
                     0
                 )
                 gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-                cell_mu_i, cell_logvar_i = self.encoderOmics(gep_t)
+                cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
                 #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
                 cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
                 cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
@@ -545,7 +555,7 @@ class ReinforceProteinOmics(Reinforce):
                 cell_logvar = cell_logvar[:batch_size]
                 gep_ts = gep_ts[:batch_size]
             #print("second size:", cell_mu_batch.size(), cell_mu_batch)
-            #cell_mu, cell_logvar = self.encoderOmics(gep_t)
+            #cell_mu, cell_logvar = self.encoder_omics(gep_t)
             latent_z_omics = torch.unsqueeze(
                 self.reparameterize(
                     cell_mu_batch,
@@ -694,18 +704,24 @@ class ReinforceProteinOmics(Reinforce):
         # TODO: Workaround since predictor does not understand aromatic carbons
         
         if self.remove_invalid:
-            smiles_list = [
-                Chem.MolToSmiles(
-                        Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
-                ).replace(':', '') for s in smiles_list
-            ]
+            smiles_list_new = []
+            for s in smiles_list:
+                try:
+                    smiles_list_new.append(Chem.MolToSmiles(
+                            Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
+                    ).replace(':', ''))
+                except:
+                    print("error occured in smiles", s)
         else:
-            smiles_list = [
-                Chem.MolToSmiles(
-                        Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-                ).replace(':', '') for s in smiles_list
-            ]
-
+            smiles_list_new = []
+            for s in smiles_list:
+                try:
+                    smiles_list_new.append(Chem.MolToSmiles(
+                            Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+                    ).replace(':', ''))
+                except:
+                    print("error occured in smiles", s)
+        smiles_list = smiles_list_new
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
             smiles_num = [
@@ -790,7 +806,7 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_mean(latent_z_omics, latent_z_protein)
+        return self.together_concat(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
         return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
@@ -841,7 +857,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Batch processing
         lrps = 1
-        if self.generator.decoder.latent_dim == 2 * self.encoderOmics.latent_size:
+        if self.generator.decoder.latent_dim == 2 * self.encoder_omics.latent_size:
             lrps = 2
         hidden = self.generator.decoder.latent_to_hidden(
             latent_z.repeat(
@@ -870,7 +886,7 @@ class ReinforceProteinOmics(Reinforce):
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
                 list(self.generator.decoder.parameters()) + list(self.encoder.parameters()) +
-                list(self.encoderOmics.parameters()), self.grad_clipping
+                list(self.encoder_omics.parameters()), self.grad_clipping
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item()
@@ -923,7 +939,7 @@ class ReinforceProteinOmics(Reinforce):
                 self.weights_path.format(encoder_filepath_protein), *args, **kwargs
             )
         if encoder_filepath_omics is not None:
-            self.encoderOmics.load(
+            self.encoder_omics.load(
                 self.weights_path.format(encoder_filepath_omics), *args, **kwargs
             )
 
@@ -936,7 +952,7 @@ class ReinforceProteinOmics(Reinforce):
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath_omics is not None:
-            self.encoderOmics.save(
+            self.encoder_omics.save(
                 self.weights_path.format(encoder_filepath_omics), *args, **kwargs
             )
         if encoder_filepath_protein is not None:
