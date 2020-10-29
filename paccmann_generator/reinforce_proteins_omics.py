@@ -90,6 +90,8 @@ class ReinforceProteinOmics(Reinforce):
         self.update_params(params)
 
         self.generator_smiles_language = generator_smiles_language
+        #print(generator_smiles_language.__dict__)
+        #1/0
 
         self.remove_invalid = remove_invalid
 
@@ -702,27 +704,27 @@ class ReinforceProteinOmics(Reinforce):
             raise ValueError('Priming drugs not yet supported')
 
         # TODO: Workaround since predictor does not understand aromatic carbons
-        if self.remove_invalid:
-            smiles_list_new = []
-            for s in smiles_list:
-                try:
-                    smiles_list_new.append(Chem.MolToSmiles(
-                            Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
-                    ).replace(':', ''))
-                except:
-                    print("error occured in smiles", s)
-                    smiles_list_new.append('')
-        else:
-            smiles_list_new = []
-            for s in smiles_list:
-                try:
-                    smiles_list_new.append(Chem.MolToSmiles(
-                            Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-                    ).replace(':', ''))
-                except:
-                    print("error occured in smiles", s)
-                    smiles_list_new.append(s)
-        smiles_list = smiles_list_new
+        #if self.remove_invalid:
+        #    smiles_list_new = []
+        #    for s in smiles_list:
+        #        try:
+        #            smiles_list_new.append(Chem.MolToSmiles(
+        #                    Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
+        #            ).replace(':', ''))
+        #        except:
+        #            print("error occured in smiles", s)
+        #            smiles_list_new.append('')
+        #else:
+        #    smiles_list_new = []
+        #    for s in smiles_list:
+        #        try:
+        #            smiles_list_new.append(Chem.MolToSmiles(
+        #                    Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+        #            ).replace(':', ''))
+        #        except:
+        #            print("error occured in smiles", s)
+        #            smiles_list_new.append(s)
+        #smiles_list = smiles_list_new
 
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
