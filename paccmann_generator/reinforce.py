@@ -41,8 +41,10 @@ class Reinforce(object):
         self.logger = logger
         self.device = get_device()
 
+        a= list(self.generator.decoder.parameters())
+        a.extend(list(self.encoder.encoding.parameters()))
         self.optimizer = torch.optim.Adam(
-            list(self.generator.decoder.parameters()),
+            a,
             lr=params.get('learning_rate', 0.0001),
             eps=params.get('eps', 0.0001),
             weight_decay=params.get('weight_decay', 0.00001)
