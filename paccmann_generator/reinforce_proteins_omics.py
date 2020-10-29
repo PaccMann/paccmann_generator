@@ -52,6 +52,16 @@ class ReinforceProteinOmics(Reinforce):
         self.encoder_omics = encoder_omics
         self.encoder_omics.eval()
 
+        a= list(self.generator.decoder.parameters())
+        a.extend(list(self.encoder.encoding.parameters()))
+        a.extend(list(self.encoder_omics.encoding.parameters()))
+        self.optimizer = torch.optim.Adam(
+            a,
+            lr=params.get('learning_rate', 0.0001),
+            eps=params.get('eps', 0.0001),
+            weight_decay=params.get('weight_decay', 0.00001)
+        )
+
         self.protein_df = protein_df
         
         self.affinity_predictor = affinity_predictor
@@ -694,18 +704,24 @@ class ReinforceProteinOmics(Reinforce):
         # TODO: Workaround since predictor does not understand aromatic carbons
         
         if self.remove_invalid:
-            smiles_list = [
-                Chem.MolToSmiles(
-                        Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
-                ).replace(':', '') for s in smiles_list
-            ]
+            smiles_list_new = []
+            for s in smiles_list:
+                try:
+                    smiles_list_new.append(Chem.MolToSmiles(
+                            Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
+                    ).replace(':', ''))
+                except:
+                    print("error occured in smiles", s)
         else:
-            smiles_list = [
-                Chem.MolToSmiles(
-                        Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-                ).replace(':', '') for s in smiles_list
-            ]
-
+            smiles_list_new = []
+            for s in smiles_list:
+                try:
+                    smiles_list_new.append(Chem.MolToSmiles(
+                            Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
+                    ).replace(':', ''))
+                except:
+                    print("error occured in smiles", s)
+        smiles_list = smiles_list_new
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
             smiles_num = [
@@ -790,7 +806,7 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_mean(latent_z_omics, latent_z_protein)
+        return self.together_concat(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
         return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
