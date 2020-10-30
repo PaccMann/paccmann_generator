@@ -199,21 +199,22 @@ class Reinforce(object):
         else:
             imgs = [Chem.MolFromSmiles(s, sanitize=False) for s in smiles]
         valid_idxs = [ind for ind in range(len(imgs)) if imgs[ind] is not None]
+        # valid_idxs = [ind for ind, img in enumerate(imgs) if img is not None]
 
-        smiles = [
-            smiles[ind] for ind in range(len(imgs))
-            if not (self.remove_invalid and imgs[ind] is None)
-        ]
-        nums = [
-            numericals[ind] for ind in range(len(numericals))
-            if not (self.remove_invalid and imgs[ind] is None)
-        ]
+        
+        smiles, nums = zip(*[
+           (smiles[ind], numericals[ind]) for ind in valid_idxs
+        ])
+        # nums = [
+        #     numericals[ind] for ind in range(len(numericals))
+        #     if not (self.remove_invalid and imgs[ind] is None)
+        # ]
 
         self.logger.info(
             f'{self.model_name}: SMILES validity: '
             f'{(len([i for i in imgs if i is not None]) / len(imgs)) * 100:.2f}%.'
         )
-        return smiles, nums, valid_idxs
+        return list(smiles), list(nums), valid_idxs
 
     def update_reward_fn(self, params):
         """ Set the reward function
