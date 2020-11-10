@@ -52,6 +52,7 @@ idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
 print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
 test_cell_line = omics_df['cell_line'].iloc[0]
+model_name = model_name + '_' + test_cell_line
 #omics_df = omics_df[omics_df.histology == cancertype]
 
 # Load protein sequence data
