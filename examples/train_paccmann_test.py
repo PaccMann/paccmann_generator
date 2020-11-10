@@ -27,6 +27,7 @@ from paccmann_generator.reinforce_proteins_omics import ReinforceProteinOmics
 from paccmann_generator import ReinforceOmic
 from paccmann_generator.reinforce_proteins import ReinforceProtein
 from files import *
+cancer_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-449','HLE','C3A']
 
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -47,7 +48,11 @@ logger.info(f'Model with name {model_name} starts.')
 # complement with avg per site
 omics_df = pd.read_pickle(omics_data_path)
 omics_df = add_avg_profile(omics_df)
-omics_df = omics_df[omics_df.histology == cancertype]
+idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
+omics_df  = omics_df[idx]
+print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
+test_cell_line = omics_df['cell_line'].iloc[0]
+#omics_df = omics_df[omics_df.histology == cancertype]
 
 # Load protein sequence data
 #if protein_data_path.endswith('.smi'):
@@ -295,6 +300,7 @@ train_omics, test_omics = omics_data_splitter(
 train_protein, test_protein = protein_data_splitter(
     protein_df, params.get('test_fraction', 0.2)
 )
+print("test omics:", len(test_omics), "test protein", test_protein.shape, "train omics:", len(train_omics), "train protein:", train_protein.shape)
 
 rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
 gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], [], []
@@ -304,8 +310,9 @@ gen_mols_p ,gen_prot_p, gen_affinity_p, modes_p = [], [], [], []
 logger.info('Models restored, start training.')
 
 # choose a validation cell line and protein.
-eval_cell_lines = np.random.choice(test_omics, size = 20, replace=True)
-eval_cell_lines = [str(i) for i in eval_cell_lines]
+#eval_cell_lines = np.random.choice(test_omics, size = 20, replace=True)
+#eval_cell_lines = [str(i) for i in eval_cell_lines]
+eval_cell_line = test_cell_line
 eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=False)
 eval_protein_names = [str(i) for i in eval_protein_names]
 
@@ -314,8 +321,9 @@ for epoch in range(1, params['epochs'] + 1):
     for step in range(1, params['steps'] + 1):
 
         # Randomly sample a cell lines and proteins for training:
-        cell_line = np.random.choice(train_omics, size = 20, replace=True)
-        cell_line = [str(i) for i in cell_line]
+        #cell_line = np.random.choice(train_omics, size = 20, replace=True)
+        #cell_line = [str(i) for i in cell_line]
+        cell_line  = [i for i in omics_df['cell_line'] if i != test_cell_line]
         protein_name = np.random.choice(train_protein.index, size = 20, replace=False)
         protein_name = [str(i) for i in protein_name]
         #cell_line = [np.random.choice(train_omics)]
