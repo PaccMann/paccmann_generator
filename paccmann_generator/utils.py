@@ -80,8 +80,8 @@ def protein_data_splitter(protein_df, test_fraction):
         train_df, test_df (tuple): A tuple of lists used for training and testing
     """
     msk = np.random.rand(len(protein_df)) < test_fraction
-    test_df = protein_df[~msk]
-    train_df = protein_df[msk]
+    test_df = protein_df[msk]
+    train_df = protein_df[~msk]
 
     return train_df, test_df
 
