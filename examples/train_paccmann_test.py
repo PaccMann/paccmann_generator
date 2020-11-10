@@ -298,9 +298,11 @@ learner_protein = ReinforceProtein(
 train_omics, test_omics = omics_data_splitter(
     omics_df, site, params.get('test_fraction', 0.2)
 )
-train_protein, test_protein = protein_data_splitter(
-    protein_df, params.get('test_fraction', 0.2)
-)
+#train_protein, test_protein = protein_data_splitter(
+#    protein_df, params.get('test_fraction', 0.2)
+#)
+train_protein = protein_df
+test_protein = protein_df
 print("test omics:", len(test_omics), "test protein", test_protein.shape, "train omics:", len(train_omics), "train protein:", train_protein.shape)
 
 rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
