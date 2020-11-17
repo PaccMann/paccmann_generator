@@ -53,8 +53,8 @@ class ReinforceProteinOmics(Reinforce):
         self.encoder_omics.eval()
 
         a= list(self.generator.decoder.parameters())
-        a.extend(list(self.encoder.encoding.parameters()))
-        a.extend(list(self.encoder_omics.encoding.parameters()))
+        #a.extend(list(self.encoder.encoding.parameters()))
+        #a.extend(list(self.encoder_omics.encoding.parameters()))
         self.optimizer = torch.optim.Adam(
             a,
             lr=params.get('learning_rate', 0.0001),
@@ -810,7 +810,7 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_concat(latent_z_omics, latent_z_protein)
+        return self.together_mean(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
         return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
