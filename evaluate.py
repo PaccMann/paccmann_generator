@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from paccmann_generator.drug_evaluators.aromatic_ring import AromaticRing
 model='liver_concat_allValid_SNU-423_combined'
 mols = pd.read_csv('biased_models/'+model+'/results/generated.csv')
 loss = pd.read_csv('biased_models/'+model+'/results/loss_reward_evolution.csv')
@@ -18,12 +19,14 @@ def get_C_fraction(smiles):
             if len(smiles) is not 0:
                 C = [1 for i in s if i=='C'].count(1)/len(smiles)
         return C
+arom = AromaticRing()
 
 mols = mols.loc[:500].drop(columns=['Unnamed: 0'])
 mols['C_frac'] = [np.nan]*mols.shape[0]
 mols['aromatic'] = [np.nan]*mols.shape[0]
 for idx, s in enumerate(mols['SMILES']):
     mols.loc[idx, 'C_frac'] = get_C_fraction(s)
+    mols.loc[idx, 'aromatic'] = arom(s)
 
 loss = loss.loc[:50]
 mols = mols.groupby(['epoch']).mean()
