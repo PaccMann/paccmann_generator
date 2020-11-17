@@ -305,11 +305,6 @@ train_protein = protein_df
 test_protein = protein_df
 print("test omics:", len(test_omics), "test protein", test_protein.shape, "train omics:", len(train_omics), "train protein:", train_protein.shape)
 
-rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
-gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], [], []
-gen_mols_o ,gen_cell_o, gen_ic50_o, modes_o = [], [], [], []
-gen_mols_p ,gen_prot_p, gen_affinity_p, modes_p = [], [], [], []
-
 logger.info('Models restored, start training.')
 
 # choose a validation cell line and protein.
@@ -320,7 +315,11 @@ eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=Fal
 eval_protein_names = [str(i) for i in eval_protein_names]
 
 for epoch in range(1, params['epochs'] + 1):
-
+    rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
+    gen_mols ,gen_prot, gen_affinity, gen_cell, gen_ic50, modes = [], [], [], [], [], []
+    gen_mols_o ,gen_cell_o, gen_ic50_o, modes_o = [], [], [], []
+    gen_mols_p ,gen_prot_p, gen_affinity_p, modes_p = [], [], [], []
+    
     for step in range(1, params['steps'] + 1):
 
         # Randomly sample a cell lines and proteins for training:
