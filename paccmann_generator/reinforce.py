@@ -42,7 +42,7 @@ class Reinforce(object):
         self.device = get_device()
 
         a= list(self.generator.decoder.parameters())
-        a.extend(list(self.encoder.encoding.parameters()))
+        #a.extend(list(self.encoder.encoding.parameters()))
         self.optimizer = torch.optim.Adam(
             a,
             lr=params.get('learning_rate', 0.0001),
