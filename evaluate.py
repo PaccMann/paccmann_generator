@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from rdkit import Chem
 from paccmann_generator.drug_evaluators.aromatic_ring import AromaticRing
-#from paccmann_generator,drug_evaluators.esol import ESOL
+from paccmann_generator.drug_evaluators.esol import ESOL
 model='liver_concat_allValid_SNU-423_combined'
 mols = pd.read_csv('biased_models/'+model+'/results/generated_per_epoch.csv')
 loss = pd.read_csv('biased_models/'+model+'/results/loss_and_more.csv')
@@ -22,10 +22,12 @@ def get_C_fraction(smiles):
                 C = [1 for i in s if i=='C'].count(1)/len(smiles)
         return C
 arom = AromaticRing()
+esol = ESOL()
 
 mols = mols.drop(columns=['Unnamed: 0'])
 mols['C_frac'] = [np.nan]*mols.shape[0]
 mols['aromatic'] = [np.nan]*mols.shape[0]
+mols['esol'] = [np.nan]*mols.shape[0]
 for idx, s in enumerate(mols['SMILES']):
     mol = Chem.MolFromSmiles(s)
     if(mol): smile = Chem.MolToSmiles(mol)
@@ -33,9 +35,11 @@ for idx, s in enumerate(mols['SMILES']):
     if(smile):
         mols.loc[idx, 'C_frac'] = get_C_fraction(s)
         mols.loc[idx, 'aromatic'] = arom(s)
+        mols.loc[idx, 'esol'] = esol(s)
     else:
         mols.loc[idx, 'C_frac'] = np.nan
         mols.loc[idx, 'aromatic'] = np.nan
+        mols.loc[idx, 'esol'] = np.nan
 print("mols",mols.describe())
 mols = mols.groupby(['epoch']).mean()
 print(mols)
