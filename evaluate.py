@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from rdkit import Chem
+from rdkit.Chem import Draw
 from paccmann_generator.drug_evaluators.aromatic_ring import AromaticRing
 from paccmann_generator.drug_evaluators.esol import ESOL
 from paccmann_generator.drug_evaluators.molecular_weight import MolecularWeight
@@ -8,10 +9,10 @@ from paccmann_generator.drug_evaluators.qed import QED
 from paccmann_generator.drug_evaluators.sas import SAS
 from paccmann_generator.drug_evaluators.scsore import SCScore
 from paccmann_generator.drug_evaluators.penalized_logp import PenalizedLogP
-name='liver_average_sanitized_SNU-423_'
+name='liver_average_allValid_temp08_SNU-423_'
 end = ['combined', 'omics', 'protein'] #
 
-def get_C_fraction(smiles):
+def get_C_fraction(smiles, model):
         """get the fraction of C atoms in the molecule
 
         Args:
@@ -23,12 +24,13 @@ def get_C_fraction(smiles):
         C=0
         if smiles:
             if len(smiles) is not 0:
-                C = [1 for i in smiles if i=='C'].count(1)/len(smiles)
-        return C
+                C = [1 for i in smiles if i=='C' or i=='c'].count(1)
+                tot = Chem.MolFromSmiles(smiles).GetNumAtoms()
+        return C/tot
 
 def main(model):    
-    mols = pd.read_csv('biased_models/'+model+'/results/generated_per_epoch.csv').drop(columns=['Unnamed: 0'])
-    loss = pd.read_csv('biased_models/'+model+'/results/loss_and_more.csv').drop(columns=['Unnamed: 0'])
+    mols = pd.read_csv('biased_models/'+model+'/results/generated.csv').drop(columns=['Unnamed: 0']) #_per_epoch
+    loss = pd.read_csv('biased_models/'+model+'/results/loss_reward_evolution.csv').drop(columns=['Unnamed: 0']) #_and_more
     mols['C_frac'] = [np.nan]*mols.shape[0]
     mols['aromatic'] = [np.nan]*mols.shape[0]
     mols['esol'] = [np.nan]*mols.shape[0]
@@ -38,13 +40,12 @@ def main(model):
     mols['SCScore'] = [np.nan]*mols.shape[0]
     mols['penalized_logP'] = [np.nan]*mols.shape[0]
     for idx, s in enumerate(mols['SMILES']):
-        print(s)
         if(s != s): mol=None
         else: mol = Chem.MolFromSmiles(s)
         if(mol): smile = Chem.MolToSmiles(mol)
         else: smile=None
         if(smile):
-            mols.loc[idx, 'C_frac'] = get_C_fraction(s)
+            mols.loc[idx, 'C_frac'] = get_C_fraction(s, model)
             mols.loc[idx, 'aromatic'] = arom(s)
             mols.loc[idx, 'esol'] = esol(s)
             mols.loc[idx, 'mol_weight'] = mol_weight(s)/100
@@ -61,9 +62,8 @@ def main(model):
             mols.loc[idx, 'sas'] = np.nan
             mols.loc[idx, 'SCScore'] = np.nan
             mols.loc[idx, 'penalized_logP'] = np.nan
-    print("describe",mols.describe())
+    mols.describe().to_csv('biased_models/'+model+'/results/Properties_overview.csv')
     mols = mols.groupby(['epoch']).mean()
-    print(mols)
     #loss['C_frac'] = [np.nan]*loss.shape[0]
     #loss['aromatic'] = [np.nan]*loss.shape[0]
     loss = loss.join(mols, on='epoch') 
