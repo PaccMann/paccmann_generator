@@ -196,9 +196,10 @@ class Reinforce(object):
         ]
         if self.remove_invalid:
             imgs = [Chem.MolFromSmiles(s, sanitize=True) for s in smiles]
+            valid_idxs = [ind for ind in range(len(imgs)) if (imgs[ind] is not None) and (not imgs[ind])]
         else:
             imgs = [Chem.MolFromSmiles(s, sanitize=False) for s in smiles]
-        valid_idxs = [ind for ind in range(len(imgs)) if (imgs[ind] is not None) and (not imgs[ind])]
+            valid_idxs = [ind for ind in range(len(imgs)) if (imgs[ind] is not None)]
         # valid_idxs = [ind for ind, img in enumerate(imgs) if img is not None]
 
         
