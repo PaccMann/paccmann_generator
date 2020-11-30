@@ -29,16 +29,20 @@ from paccmann_generator.reinforce_proteins_omics import ReinforceProteinOmics
 from paccmann_generator import ReinforceOmic
 from paccmann_generator.reinforce_proteins import ReinforceProtein
 from files import *
+cancer_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-449','HLE','C3A']
 
-
-model_name = 'average_allValid_SNU-423'
+model_name = 'average_allValid_temp08'
 remove_invalid = False
-gen_epoch = "7"
-omics_epoch = "13"
-protein_epoch = "30" 
+gen_epoch = "10"
+omics_epoch = "10"
+protein_epoch = "17" 
 omics_df = pd.read_pickle(omics_data_path)
 omics_df = add_avg_profile(omics_df)
-omics_df = omics_df[omics_df.histology == cancertype]
+idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
+omics_df  = omics_df[idx]
+print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
+test_cell_line = omics_df['cell_line'].iloc[0]
+model_name = model_name + '_' + test_cell_line
 
 protein_df = pd.read_csv(protein_data_path, index_col=0)#, header=None, names=[str(x) for x in range(768)]) #'entry_name')
 protein_df = protein_df[~protein_df.index.isnull()]
@@ -48,7 +52,8 @@ protein_seq_df = pd.read_csv(protein_data_seq_path, names = ['sequence'], index_
 protein_seq_df.index = [i.split('|')[2] for i in protein_seq_df.index]
 protein_df = pd.concat([protein_df, protein_seq_df], axis=1, join='outer')
 protein_df = protein_df[[s.split('_')[0] in cancer_genes for s in protein_df.index]]
-
+#print(protein_df.head)
+print("proteins:", protein_df.index, len(cancer_genes))
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger('train_paccmann_rl')
@@ -246,39 +251,66 @@ protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 
 batch_size1 = 150
 batch_size = 10001
-protein = protein_df
+proteins = protein_df.index.tolist()
 cell_line = ['SNU-423']
 valid_smiles_batch_combined = ['SMILES']
 valid_smiles_batch_omics = ['SMILES']
 valid_smiles_batch_proteins = ['SMILES']
 first_iter = None
-
+p, c = [], []
 while(len(valid_smiles_batch_combined)<batch_size):
     combined.generate_len = batch_size1
-    valid_smiles_c, valid_nums_c, _ = combined.get_smiles_from_latent(
-                torch.rand([1, batch_size1, 128])
+    valid_smiles_c, idx = combined.generate_compound(
+                batch_size1, proteins, cell_line
     )
     valid_smiles_batch_combined = np.append(valid_smiles_batch_combined, valid_smiles_c)
+    p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
+    c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
+    #print(len(valid_smiles_batch_combined), len(p), len(c))
     print(len(valid_smiles_batch_combined))
-savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+".csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
-
+df = pd.DataFrame(
+    {
+        'protein': p,
+        'cell_line': c,
+        'SMILES': valid_smiles_batch_combined
+    }
+)
+df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv")
+#savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
+c = []
 while(len(valid_smiles_batch_omics)<batch_size):
     omics.generate_len = batch_size1
-    valid_smiles_o, valid_nums_o, _ = omics.get_smiles_from_latent(
-                torch.rand([1, batch_size1, 128])
+    valid_smiles_o, idx = omics.generate_compound(
+                batch_size1, cell_line
     )
     valid_smiles_batch_omics = np.append(valid_smiles_batch_omics, valid_smiles_o)
+    c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
     print(len(valid_smiles_batch_omics))
-savetxt(omics.model_path+"/generated_smiles_"+omics_epoch+".csv", valid_smiles_batch_omics, delimiter=',', fmt=('%s'))
-
+df = pd.DataFrame(
+    {
+        'cell_line': c,
+        'SMILES': valid_smiles_batch_omics
+    }
+)
+df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv")
+#savetxt(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv", valid_smiles_batch_omics, delimiter=',', fmt=('%s'))
+p = []
 while(len(valid_smiles_batch_proteins)<batch_size):
     protein.generate_len = batch_size1
-    valid_smiles_p, valid_nums_p, _ = protein.get_smiles_from_latent(
-                torch.rand([1, batch_size1, 128])
+    valid_smiles_p, idx = protein.generate_compound(
+                batch_size1, proteins
     )
     #print(len(valid_smiles_batch), len(valid_smiles))
     valid_smiles_batch_proteins = np.append(valid_smiles_batch_proteins, valid_smiles_p)
+    p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
     print(len(valid_smiles_batch_proteins))
     # print(len(idx_batch))
-savetxt(protein.model_path+"/generated_smiles_"+protein_epoch+".csv", valid_smiles_batch_proteins, delimiter=',', fmt=('%s'))
+df = pd.DataFrame(
+    {
+        'protein': p,
+        'SMILES': valid_smiles_batch_proteins
+    }
+)
+df.to_csv(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv")
+#savetxt(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv", valid_smiles_batch_proteins, delimiter=',', fmt=('%s'))
 
