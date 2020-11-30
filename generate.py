@@ -8,6 +8,7 @@ import pandas as pd
 import warnings
 import torch
 from numpy import savetxt
+import glob
 warnings.filterwarnings("ignore")
 from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
@@ -31,11 +32,126 @@ from paccmann_generator.reinforce_proteins import ReinforceProtein
 from files import *
 cancer_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-449','HLE','C3A']
 
-model_name = 'average_allValid_temp08'
-remove_invalid = False
-gen_epoch = "10"
-omics_epoch = "10"
-protein_epoch = "17" 
+model_name = 'concat_sanitized'
+remove_invalid = True
+gen_epoch = "13"
+omics_epoch = "1"
+protein_epoch = "29" 
+
+def generate():
+    batch_size1 = 150
+    batch_size = 10001
+    proteins = protein_df.index.tolist()
+    cell_line = ['SNU-423']
+    valid_smiles_batch_combined = ['SMILES']
+    valid_smiles_batch_omics = ['SMILES']
+    valid_smiles_batch_proteins = ['SMILES']
+    first_iter = None
+    p, c = [], []
+    while(len(valid_smiles_batch_combined)<batch_size):
+        combined.generate_len = batch_size1
+        valid_smiles_c, idx = combined.generate_compound(
+                    batch_size1, proteins, cell_line
+        )
+        valid_smiles_batch_combined = np.append(valid_smiles_batch_combined, valid_smiles_c)
+        p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
+        c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
+        #print(len(valid_smiles_batch_combined), len(p), len(c))
+        print(len(valid_smiles_batch_combined))
+    df = pd.DataFrame(
+        {
+            'protein': p,
+            'cell_line': c,
+            'SMILES': valid_smiles_batch_combined
+        }
+    )
+    df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv")
+    #savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
+    c = []
+    while(len(valid_smiles_batch_omics)<batch_size):
+        omics.generate_len = batch_size1
+        valid_smiles_o, idx = omics.generate_compound(
+                    batch_size1, cell_line
+        )
+        valid_smiles_batch_omics = np.append(valid_smiles_batch_omics, valid_smiles_o)
+        c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
+        print(len(valid_smiles_batch_omics))
+    df = pd.DataFrame(
+        {
+            'cell_line': c,
+            'SMILES': valid_smiles_batch_omics
+        }
+    )
+    df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv")
+    #savetxt(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv", valid_smiles_batch_omics, delimiter=',', fmt=('%s'))
+    p = []
+    while(len(valid_smiles_batch_proteins)<batch_size):
+        protein.generate_len = batch_size1
+        valid_smiles_p, idx = protein.generate_compound(
+                    batch_size1, proteins
+        )
+        #print(len(valid_smiles_batch), len(valid_smiles))
+        valid_smiles_batch_proteins = np.append(valid_smiles_batch_proteins, valid_smiles_p)
+        p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
+        print(len(valid_smiles_batch_proteins))
+        # print(len(idx_batch))
+    df = pd.DataFrame(
+        {
+            'protein': p,
+            'SMILES': valid_smiles_batch_proteins
+        }
+    )
+    df.to_csv(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv")
+    #savetxt(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv", valid_smiles_batch_proteins, delimiter=',', fmt=('%s'))
+
+def latent_space():
+    models = [combined, omics, protein]
+    print_stuff=False
+    for model in models:
+        data = pd.read_csv(glob.glob(os.path.join(model.model_path , 'generated*_fromPairs.csv'))[0])
+        i=0
+        ps, cs, tot = [], [], []
+        for i in data.index:
+            if i ==0: i=i+1
+            if(print_stuff):
+                print(i)
+            latent_protein = None
+            latent_cell = None
+            if 'protein' in data:
+                latent_protein = model.encode_protein(protein=[data.loc[i, 'protein']], batch_size=1)
+                ps.append(latent_protein.numpy())
+                if(print_stuff):
+                    print(latent_protein.shape)
+            if 'cell_line' in data:
+                latent_cell = model.encode_cell_line(cell_line=[data.loc[i, 'cell_line']], batch_size=1)
+                cs.append(latent_cell.numpy())
+                if(print_stuff):
+                    print(latent_cell.shape)
+            if None not in (latent_protein, latent_cell):
+                latent_z = model.together(latent_cell, latent_protein)
+                tot.append(latent_z.detach().numpy())
+                if(print_stuff):
+                    print(latent_z.shape)
+            if(print_stuff):
+                if(i==5):
+                    print(ps, len(ps))
+                    1/0
+        df = pd.DataFrame(
+            {
+                'SMILES': data['SMILES']
+            }
+        )
+        if 'protein' in data:
+            df['protein']= data['protein']
+            df['latent_ptotein'] = ps
+        if 'cell_line' in data:
+            df['cell_line'] = data['cell_line']
+            df['latent_cell'] = cs
+        if None not in (latent_protein, latent_cell):
+            df['latent_combined'] = tot
+        df.to_csv(os.path.join(model.model_path, 'results', 'latent_fromPairs.csv'))
+
+
 omics_df = pd.read_pickle(omics_data_path)
 omics_df = add_avg_profile(omics_df)
 idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
@@ -248,69 +364,5 @@ protein = ReinforceProtein(
 )
 protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 #protein.eval()
-
-batch_size1 = 150
-batch_size = 10001
-proteins = protein_df.index.tolist()
-cell_line = ['SNU-423']
-valid_smiles_batch_combined = ['SMILES']
-valid_smiles_batch_omics = ['SMILES']
-valid_smiles_batch_proteins = ['SMILES']
-first_iter = None
-p, c = [], []
-while(len(valid_smiles_batch_combined)<batch_size):
-    combined.generate_len = batch_size1
-    valid_smiles_c, idx = combined.generate_compound(
-                batch_size1, proteins, cell_line
-    )
-    valid_smiles_batch_combined = np.append(valid_smiles_batch_combined, valid_smiles_c)
-    p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
-    c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
-    #print(len(valid_smiles_batch_combined), len(p), len(c))
-    print(len(valid_smiles_batch_combined))
-df = pd.DataFrame(
-    {
-        'protein': p,
-        'cell_line': c,
-        'SMILES': valid_smiles_batch_combined
-    }
-)
-df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv")
-#savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
-c = []
-while(len(valid_smiles_batch_omics)<batch_size):
-    omics.generate_len = batch_size1
-    valid_smiles_o, idx = omics.generate_compound(
-                batch_size1, cell_line
-    )
-    valid_smiles_batch_omics = np.append(valid_smiles_batch_omics, valid_smiles_o)
-    c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
-    print(len(valid_smiles_batch_omics))
-df = pd.DataFrame(
-    {
-        'cell_line': c,
-        'SMILES': valid_smiles_batch_omics
-    }
-)
-df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv")
-#savetxt(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv", valid_smiles_batch_omics, delimiter=',', fmt=('%s'))
-p = []
-while(len(valid_smiles_batch_proteins)<batch_size):
-    protein.generate_len = batch_size1
-    valid_smiles_p, idx = protein.generate_compound(
-                batch_size1, proteins
-    )
-    #print(len(valid_smiles_batch), len(valid_smiles))
-    valid_smiles_batch_proteins = np.append(valid_smiles_batch_proteins, valid_smiles_p)
-    p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
-    print(len(valid_smiles_batch_proteins))
-    # print(len(idx_batch))
-df = pd.DataFrame(
-    {
-        'protein': p,
-        'SMILES': valid_smiles_batch_proteins
-    }
-)
-df.to_csv(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv")
-#savetxt(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv", valid_smiles_batch_proteins, delimiter=',', fmt=('%s'))
+latent_space()
 
