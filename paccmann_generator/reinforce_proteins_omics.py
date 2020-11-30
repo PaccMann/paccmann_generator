@@ -451,7 +451,7 @@ class ReinforceProteinOmics(Reinforce):
         else:
             return valid_smiles, predP, log_predsO, valid_idx
 
-    def generate_compounds(
+    def generate_compound(
         self,
         batch_size,
         protein=None,
@@ -491,6 +491,7 @@ class ReinforceProteinOmics(Reinforce):
             protein_logvar = []
             protein_predictor_tensor = []
             for prot in protein:
+                #print("protein:", prot, )
                 protein_encoder_tensor, protein_predictor_tensor_i = (
                     self.protein_to_numerical(
                         prot, encoder_uses_sequence=False, predictor_uses_sequence=True
@@ -531,6 +532,7 @@ class ReinforceProteinOmics(Reinforce):
             cell_logvar = []
             gep_ts = []
             for cell in cell_line:
+                #print("cell", cell)
                 gep_t = torch.unsqueeze(
                     torch.Tensor(
                         self.gep_df[
