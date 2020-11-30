@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import pandas as pd
 import warnings
+import glob
 warnings.filterwarnings("ignore")
 from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
@@ -297,15 +298,17 @@ learner_protein = ReinforceProtein(
 models = [learner_combined, learner_omics, learner_protein]
 print_stuff=False
 for model in models:
-    data = pd.read_csv(model.model_path + '/results/generated.csv')
+    data = pd.read_csv(glob.glob(os.path.join(model.model_path , 'generated*_fromPairs.csv'))[0])
     i=0
     ps, cs, tot = [], [], []
     for i in data.index:
+        if i ==0: i=i+1
         if(print_stuff):
             print(i)
         latent_protein = None
         latent_cell = None
         if 'protein' in data:
+            print([data.loc[i, 'protein']])
             latent_protein = model.encode_protein(protein=[data.loc[i, 'protein']], batch_size=1)
             ps.append(latent_protein.numpy())
             if(print_stuff):
@@ -336,7 +339,7 @@ for model in models:
         df['latent_cell'] = cs
     if None not in (latent_protein, latent_cell):
         df['latent_combined'] = tot
-    df.to_csv(os.path.join(model.model_path, 'results', 'latent.csv'))
+    df.to_csv(os.path.join(model.model_path, 'results', 'latent_fromPairs.csv'))
     # for protein, cell in zip(data['protein'], data['cell_line']):
     #     print(protein, cell)
     #     latent_cell = model.encode_cell_line(cell_line=[cell], batch_size=1)
