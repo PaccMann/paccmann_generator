@@ -304,6 +304,79 @@ class ReinforceProtein(Reinforce):
         else:
             return valid_smiles, pred, valid_idx
 
+    def generate_compound(
+            self,
+            batch_size,
+            protein=None,
+            primed_drug=' ',
+            return_latent=False
+        ):
+        """
+        Generate some compounds and evaluate them with the predictor
+
+        Args:
+            epoch (int): The training epoch.
+            batch_size (int): The batch size.
+            protein (str): A string, the protein used to drive generator.
+            primed_drug (str): SMILES string to prime the generator.
+
+        Returns:
+            np.array: Predictions from PaccMann.
+        """
+        if primed_drug != ' ':
+            raise ValueError('Drug priming not yet supported.')
+
+        self.affinity_predictor.eval()
+        self.encoder.eval()
+        self.generator.eval()
+
+        if protein is None:
+            # Generate a random molecule
+            latent_z = torch.randn(
+                1, batch_size, self.generator.decoder.latent_dim
+            )
+        else:
+            protein_mu = []
+            protein_logvar = []
+            protein_predictor_tensor = []
+            for prot in protein:
+                protein_encoder_tensor, protein_predictor_tensor_i = (
+                    self.protein_to_numerical(
+                        prot, encoder_uses_sequence=False, predictor_uses_sequence=True
+                    )
+                )
+                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_predictor_tensor.append(torch.unsqueeze(protein_predictor_tensor_i, 0).detach().numpy()[0][0])
+                protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
+                protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
+            protein_mu = torch.as_tensor(protein_mu)
+            protein_logvar = torch.as_tensor(protein_logvar)
+            protein_predictor_tensor = torch.as_tensor(protein_predictor_tensor)
+            
+            protein_mu_batch = protein_mu.repeat(batch_size, 1)
+            protein_logvar = protein_logvar.repeat(batch_size, 1)
+            protein_predictor_tensor = protein_predictor_tensor.repeat(batch_size, 1)
+            if protein_mu_batch.size()[0]>batch_size:
+                protein_mu_batch = protein_mu_batch[:batch_size]
+                protein_logvar = protein_logvar[:batch_size]
+                protein_predictor_tensor = protein_predictor_tensor[:batch_size]
+            
+            latent_z = torch.unsqueeze(
+                self.reparameterize(
+                    protein_mu_batch,
+                    protein_logvar
+                ), 0
+            )
+
+        # Generate drugs
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
+            latent_z
+        )
+        if return_latent:
+            return valid_smiles, latent_z
+        else:
+            return valid_smiles, valid_idx
+
     def update_reward_fn(self, params):
         """ Set the reward function
         
