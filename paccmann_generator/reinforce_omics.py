@@ -272,6 +272,98 @@ class ReinforceOmic(Reinforce):
         else:
             return valid_smiles, log_preds, valid_idx
 
+    def generate_compound(
+            self,
+            batch_size,
+            cell_line=None,
+            primed_drug=' ',
+            return_latent=False
+        ):
+        """
+        Generate some compounds and evaluate them with the predictor
+
+        Args:
+            epoch (int): The training epoch.
+            batch_size (int): The batch size.
+            cell_line (str): A string, the cell_line used to drive generator.
+            primed_drug (str): SMILES string to prime the generator.
+
+        Returns:
+            np.array: Predictions from PaccMann.
+        """
+        self.predictor.eval()
+        self.encoder.eval()
+        self.generator.eval()
+
+        if cell_line is None:
+            # Generate a random molecule
+            latent_z = torch.randn(
+                1, batch_size, self.generator.decoder.latent_dim
+            )
+        else:
+            cell_mu = []
+            cell_logvar = []
+            gep_ts = []
+            for cell in cell_line:
+                gep_t = torch.unsqueeze(
+                    torch.Tensor(
+                        self.gep_df[
+                            self.gep_df['cell_line'] == cell  # yapf: disable
+                        ].iloc[0].gene_expression.values
+                    ),
+                    0
+                )
+                gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+                cell_mu_i, cell_logvar_i = self.encoder(gep_t)
+                #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
+                cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
+                cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
+            gep_ts = torch.as_tensor(gep_ts)
+            cell_mu = torch.as_tensor(cell_mu)
+            cell_logvar = torch.as_tensor(cell_logvar)
+            #print("before", cell_mu.size())
+            #print(cell_mu)
+            cell_mu_batch = cell_mu.repeat(batch_size, 1)
+            cell_logvar = cell_logvar.repeat(batch_size, 1)
+            gep_ts = gep_ts.repeat(batch_size, 1)
+            if cell_mu_batch.size()[0]>batch_size:
+                cell_mu_batch = cell_mu_batch[:batch_size]
+                cell_logvar = cell_logvar[:batch_size]
+                gep_ts = gep_ts[:batch_size]
+            latent_z = torch.unsqueeze(
+                self.reparameterize(
+                    cell_mu_batch,
+                    cell_logvar
+                ), 0
+            )
+            
+        if type(primed_drug) != str:
+            raise TypeError('Provide drug as SMILES string.')
+
+        # # Prime the generator (optional)
+        # num_drug = self.smiles_to_numerical(
+        #     [primed_drug], pad_len=None, target='generator'
+        # )
+        # drug_mu, drug_logvar = self.generator.encode(num_drug)
+        # drug_mu, drug_logvar = drug_mu[0, :], drug_logvar[0, :]
+        # latent_drug = torch.unsqueeze(
+        #     self.reparameterize(
+        #         drug_mu.repeat(batch_size, 1),
+        #         drug_logvar.repeat(batch_size, 1)
+        #     ), 0
+        # )
+        # latent_z += latent_drug
+
+        # Generate drugs
+        valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(
+            latent_z
+        )
+
+        if return_latent:
+            return valid_smiles, latent_z
+        else:
+            return valid_smiles, valid_idx
+
     def update_reward_fn(self, params):
         """ Set the reward function
         
