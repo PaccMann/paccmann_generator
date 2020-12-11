@@ -32,8 +32,9 @@ print(scaled_data.std(axis = 0)) # should be 1
 # how many cell lines overlap:
 print(df.index)
 print(scaled_data.columns)
-cells = df.index
-overlap = [cell for cell in cells if cell in scaled_data.columns]
+genes = [str(i).lower() for i in df.index]
+genes2 = [i.lower() for i in scaled_data.columns]
+overlap = [gene for gene in genes if gene in genes2]
 print("overlapping on cell lines:", overlap)
 
 # wilcoxon test:
