@@ -8,7 +8,6 @@ import pandas as pd
 import warnings
 import torch
 from numpy import savetxt
-import glob
 warnings.filterwarnings("ignore")
 from paccmann_chemistry.models import (
     StackGRUDecoder, StackGRUEncoder, TeacherVAE
