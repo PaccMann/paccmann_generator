@@ -10,7 +10,13 @@ sys.path.append('/home/tol/interact')
 from interact.uniprot import dict_from_uniprot
 
 gene_names = dict_from_uniprot(key_name='HGNC')
+hugo = pd.read_csv('data/hgnc-symbol-check.csv', header =1, index_col =0)
+remove = hugo.index[hugo.index.duplicated()]
+nans = hugo.index[hugo['HGNC ID'].isnull()]
+hugo = hugo[~hugo.index.duplicated()]
+hugo = hugo.drop(nans)#hugo.dropna(subset=['HGNC ID'])
 
+print(hugo.shape)
 scaler = StandardScaler()
 data2 = pd.read_pickle('data/gdsc_transcriptomics_for_conditional_generation.pkl')
 data2 = add_avg_profile(data2)
@@ -36,16 +42,22 @@ print(scaled_data.mean(axis = 0)) # should be 0
 print(scaled_data.std(axis = 0)) # should be 1
 
 # how many cell lines overlap:
-print(df.index)
-print(scaled_data.columns)
 genes = [str(i) for i in df.index]
-genes2 = [i for i in scaled_data.columns]
-print("overlap dict:", [gene_names[gene] for gene in genes2 if gene in gene_names])
-overlap = [gene for gene in genes if gene in genes2]
-print("overlapping on cell lines:", overlap)
+genes2 = [i for i in scaled_data.columns if (i not in remove) or (i not in nans)]
+print(len(genes2))
+liste2 = []
+for gene in genes2:
+    #print(gene, type(gene), (gene in hugo.index))
+    if (gene in hugo.index) and (hugo.loc[gene,'HGNC ID'] in gene_names):
+        liste2.append(gene_names[hugo.loc[gene,'HGNC ID']])
+
+print('overlap dict:', len(liste2))
+overlap = [gene for gene in genes if gene in liste2]
+print('overlapping on cell lines:', overlap)
 
 # wilcoxon test:
 print(wilcoxon(scaled_data, data2))
 
-#jensen shanon:
+# jensen shanon:
+# TO-DO: make historgrams to get probability distributions to use as input
 print(jensenshannon(scaled_data, data2))
