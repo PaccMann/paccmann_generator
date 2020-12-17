@@ -32,13 +32,13 @@ from files import *
 cancer_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-449','HLE','C3A']
 
 model_name = 'concat_sanitized'
-remove_invalid = False
+remove_invalid = True
 gen_epoch = "13"
 omics_epoch = "1"
 protein_epoch = "29" 
 
 def generate(model):
-    latents = pd.read_csv(model.model_path+"/results/grid_latent.csv", header = None)
+    latents = pd.read_csv(model.model_path+"/results/grid_latent_small.csv", header = None)
     print(latents.shape)
     batch_size1 = 50
     batch_size = 10000
@@ -47,23 +47,26 @@ def generate(model):
     valid_smiles_batch_proteins = []
     first_iter = None
     p, c = [], []
-    idx = []
+    indx = []
     for i in range(0, latents.shape[0]):
+        valid_smiles_batch=[]
         model.generate_len = batch_size1
-        latent = torch.Tensor(latents.iloc[i]).repeat((1,batch_size1, 1))
-        valid_smiles_p, _, idx = model.get_smiles_from_latent(latent)
-        #print(len(valid_smiles_batch), len(valid_smiles))
-        valid_smiles_batch_proteins = np.append(valid_smiles_batch_proteins, valid_smiles_p)
+        while(len(valid_smiles_batch)<batch_size1):
+            latent = torch.Tensor(latents.iloc[i]).repeat((1,batch_size1, 1))
+            valid_smiles_p, _, idx = model.get_smiles_from_latent(latent)
+            #print(len(valid_smiles_batch), len(valid_smiles))
+            valid_smiles_batch = np.append(valid_smiles_batch, valid_smiles_p)
+            valid_smiles_batch_proteins = np.append(valid_smiles_batch_proteins, valid_smiles_p)
+            indx = np.append(indx, [i]*len(valid_smiles_p))
         print(len(valid_smiles_batch_proteins))
-        idx.append([i]*batch_size1)
         # print(len(idx_batch))
     df = pd.DataFrame(
         {
-            'latent_idx': idx,
+            'latent_idx': indx,
             'SMILES': valid_smiles_batch_proteins
         }
     )
-    df.to_csv(model.model_path+"/generated_smiles_"+"fromGrid.csv")
+    df.to_csv(model.model_path+"/generated_smiles_"+"fromGrid_small.csv")
     
 
 omics_df = pd.read_pickle(omics_data_path)
@@ -279,3 +282,4 @@ protein = ReinforceProtein(
 protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 #protein.eval()
 generate(omics)
+generate(protein)
