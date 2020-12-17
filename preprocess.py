@@ -32,10 +32,13 @@ hugo = hugo[~hugo.index.duplicated()]
 hugo = hugo.drop(nans)#hugo.dropna(subset=['HGNC ID'])
 
 logger.info(hugo.shape)
+
 scaler = StandardScaler()
 data2 = pd.read_pickle('data/gdsc_transcriptomics_for_conditional_generation.pkl')
 gene_list = pd.read_pickle('data/2128_genes.pkl')
 data2 = add_avg_profile(data2)
+data2 = data2[data2.histology == 'neuroblastoma']
+print("omics data:", data2.shape)
 #print(data2.head(3))
 df = pd.DataFrame(np.array([series.values for series in data2.gene_expression.values]), index=data2['cell_line'], columns=gene_list)
 #print(df.head(3))
@@ -74,6 +77,7 @@ logger.info('overlapping on cell lines:', len(overlap))
 # wilcoxon test:
 #print(wilcoxon(scaled_data.values.flatten(), data2.values.flatten()))
 
+
 def get_distributions(df, genes, bins=100):
 
     return pd.DataFrame(
@@ -82,21 +86,16 @@ def get_distributions(df, genes, bins=100):
     )
 
 # jensen shanon:
-# TO-DO: make historgrams to get probability distributions to use as input
 scaled_data_prob = get_distributions(scaled_data, overlap, bins=4)
 df_prob = get_distributions(df, overlap, bins=4)
 js = []
 for gene in overlap:
-    logger.info(scaled_data_prob.loc[gene])
-    logger.info(scaled_data_prob.loc[gene].shape) 
-    logger.info(df_prob.loc[gene])
-    logger.info(df_prob.loc[gene].shape)
     js.append(jensenshannon(scaled_data_prob.loc[gene], df_prob.loc[gene], 2))
 #logger.enable("my_library")
 logger.info(js)
 sns.distplot(js, kde=True)
 plt.xlim(0, 1)
-plt.xlabel('jesens-shannon divergence')
+plt.xlabel('jesen-shannon divergence')
 plt.savefig('data/js.pdf')
 #js = pd.DataFrame(pairwise_distances(scaled_data_prob, df_prob, metric=jensenshannon), index=overlap, columns=overlap)
 
