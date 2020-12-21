@@ -40,12 +40,12 @@ protein_epoch = "29"
 
 def generate():
     batch_size1 = 150
-    batch_size = 10001
+    batch_size = 10000
     proteins = protein_df.index.tolist()
     cell_line = ['SNU-423']
-    valid_smiles_batch_combined = ['SMILES']
-    valid_smiles_batch_omics = ['SMILES']
-    valid_smiles_batch_proteins = ['SMILES']
+    valid_smiles_batch_combined = []
+    valid_smiles_batch_omics = []
+    valid_smiles_batch_proteins = []
     first_iter = None
     p, c = [], []
     while(len(valid_smiles_batch_combined)<batch_size):
@@ -65,7 +65,7 @@ def generate():
             'SMILES': valid_smiles_batch_combined
         }
     )
-    df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv")
+    df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs_withoutEmpty.csv")
     #savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+"_fromPairs.csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
     c = []
     while(len(valid_smiles_batch_omics)<batch_size):
@@ -82,7 +82,7 @@ def generate():
             'SMILES': valid_smiles_batch_omics
         }
     )
-    df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv")
+    df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs_withoutEmpty.csv")
     #savetxt(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv", valid_smiles_batch_omics, delimiter=',', fmt=('%s'))
     p = []
     while(len(valid_smiles_batch_proteins)<batch_size):
@@ -101,18 +101,18 @@ def generate():
             'SMILES': valid_smiles_batch_proteins
         }
     )
-    df.to_csv(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv")
+    df.to_csv(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs_withoutEmpty.csv")
     #savetxt(protein.model_path+"/generated_smiles_"+protein_epoch+"_fromPairs.csv", valid_smiles_batch_proteins, delimiter=',', fmt=('%s'))
 
-def latent_space():
-    models = [combined, omics, protein]
+def latent_space(epoch_nr):
+    models = [protein, omics] # combined, 
     print_stuff=False
     for model in models:
-        data = pd.read_csv(glob.glob(os.path.join(model.model_path , 'generated*_fromPairs.csv'))[0])
+        data = pd.read_csv(glob.glob(os.path.join(model.model_path , 'generated*_fromPairs_withoutEmpty.csv'))[0])
         i=0
         ps, cs, tot = [], [], []
         for i in data.index:
-            if i ==0: i=i+1
+            #if i ==0: i=i+1
             if(print_stuff):
                 print(i)
             latent_protein = None
@@ -149,7 +149,53 @@ def latent_space():
             df['latent_cell'] = cs
         if None not in (latent_protein, latent_cell):
             df['latent_combined'] = tot
-        df.to_csv(os.path.join(model.model_path, 'results', 'latent_fromPairs.csv'))
+        df.to_csv(os.path.join(model.model_path, 'results', 'latent_fromPairs_withoutEmpty.csv'))
+
+    for idx, model in enumerate(models):
+        data = pd.read_csv(os.path.join(model.model_path , 'results/generated_per_epoch.csv'))
+        data = data[data.epoch == int(epoch_nr[idx])]
+        data = data[data['mode'] == 'train']
+        i=0
+        ps, cs, tot = [], [], []
+        for i in data.index:
+            #if i ==0: i=i+1
+            if(print_stuff):
+                print(i)
+            latent_protein = None
+            latent_cell = None
+            if 'protein' in data:
+                latent_protein = model.encode_protein(protein=[data.loc[i, 'protein']], batch_size=1)
+                ps.append(latent_protein.numpy())
+                if(print_stuff):
+                    print(latent_protein.shape)
+            if 'cell_line' in data:
+                latent_cell = model.encode_cell_line(cell_line=[data.loc[i, 'cell_line']], batch_size=1)
+                cs.append(latent_cell.numpy())
+                if(print_stuff):
+                    print(latent_cell.shape)
+            if None not in (latent_protein, latent_cell):
+                latent_z = model.together(latent_cell, latent_protein)
+                tot.append(latent_z.detach().numpy())
+                if(print_stuff):
+                    print(latent_z.shape)
+            if(print_stuff):
+                if(i==5):
+                    print(ps, len(ps))
+                    1/0
+        df = pd.DataFrame(
+            {
+                'SMILES': data['SMILES']
+            }
+        )
+        if 'protein' in data:
+            df['protein']= data['protein']
+            df['latent_ptotein'] = ps
+        if 'cell_line' in data:
+            df['cell_line'] = data['cell_line']
+            df['latent_cell'] = cs
+        if None not in (latent_protein, latent_cell):
+            df['latent_combined'] = tot
+        df.to_csv(os.path.join(model.model_path, 'results', 'latent_training.csv'))
 
 
 omics_df = pd.read_pickle(omics_data_path)
@@ -364,5 +410,6 @@ protein = ReinforceProtein(
 )
 protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 #protein.eval()
-latent_space()
+#generate()
+latent_space([protein_epoch, omics_epoch])
 
