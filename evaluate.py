@@ -9,10 +9,10 @@ from paccmann_generator.drug_evaluators.qed import QED
 from paccmann_generator.drug_evaluators.sas import SAS
 from paccmann_generator.drug_evaluators.scsore import SCScore
 from paccmann_generator.drug_evaluators.penalized_logp import PenalizedLogP
-name='liver_average_allValid_temp08_SNU-423_'
-end = ['combined', 'omics', 'protein'] #
+name='liver_average_sanitize_SNU-423_lern0.0001_2_'
+end = ['protein'] #'combined', 'omics', 
 
-def get_C_fraction(smiles, model):
+def get_C_fraction(smiles):
         """get the fraction of C atoms in the molecule
 
         Args:
@@ -22,7 +22,7 @@ def get_C_fraction(smiles, model):
             list: a list of the fractions of C atmons per molecule.
         """
         C=0
-        if smiles:
+        if not np.isnan(smiles):
             if len(smiles) is not 0:
                 C = [1 for i in smiles if i=='C' or i=='c'].count(1)
                 tot = Chem.MolFromSmiles(smiles).GetNumAtoms()
@@ -45,7 +45,7 @@ def main(model):
         if(mol): smile = Chem.MolToSmiles(mol)
         else: smile=None
         if(smile):
-            mols.loc[idx, 'C_frac'] = get_C_fraction(s, model)
+            mols.loc[idx, 'C_frac'] = get_C_fraction(s)
             mols.loc[idx, 'aromatic'] = arom(s)
             mols.loc[idx, 'esol'] = esol(s)
             mols.loc[idx, 'mol_weight'] = mol_weight(s)/100
