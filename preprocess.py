@@ -33,25 +33,38 @@ hugo = pd.read_csv('data/hgnc-symbol-check.csv', header =1, index_col =0)
 remove = hugo.index[hugo.index.duplicated()]
 nans = hugo.index[hugo['HGNC ID'].isnull()]
 hugo = hugo[~hugo.index.duplicated()]
-hugo = hugo.drop(nans)#hugo.dropna(subset=['HGNC ID'])
+hugo = hugo.drop(nans) # hugo.dropna(subset=['HGNC ID'])
 
 logger.info(hugo.shape)
 
 scaler = StandardScaler()
+scaler2 = StandardScaler()
+hepatoblastoma_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-449','HLE','C3A']
+medulloblastoma_cell_lines = ['D-283MED','Daoy','ONS-76','PFSK-1']
+cancer_cell_lines = medulloblastoma_cell_lines
 data2 = pd.read_pickle('data/gdsc_transcriptomics_for_conditional_generation.pkl')
 gene_list = pd.read_pickle('data/2128_genes.pkl')
 data2 = add_avg_profile(data2)
-data2 = data2[data2.histology == 'neuroblastoma']
-#print(data2.head(3))
+#idx = [i in cancer_cell_lines for i in data2['cell_line']]
+#data2  = data2[idx]
+#logger.info(data2.shape)
+data2 = data2[(data2.site == 'central_nervous_system') | (data2.site == 'brain')]
+#data2 = data2[data2.histology == 'neuroblastoma']
+logger.info(data2.shape)
 df = pd.DataFrame(np.array([series.values for series in data2.gene_expression.values]), index=data2['cell_line'], columns=gene_list)
 #print(df.head(3))
-#print(df.mean(axis = 0)) # should be 0 
-#print(df.std(axis = 0)) # should be 1
-files = 'TumorHepatoblastoma(FGF8activation)-Kappler-22-deseq2_rlog-gse151347'
+print(df.mean(axis = 0)) # should be 0 
+print(df.std(axis = 0)) # should be 1
+# df = pd.DataFrame(scaler2.fit_transform(df), index= df.index, columns= df.columns)
+# print(df.mean(axis = 0)) # should be 0 
+# print(df.std(axis = 0)) # should be 1
+# 1/0
+files = 'TumorMedulloblastoma-Thompson-46-GCRMA-u133a'
 data = pd.read_csv(f'data/{files}.txt', sep='\t', index_col=0)
-data = data.drop(columns=['probeset'])
+data = data.drop(columns=['probeset']).astype(float)
 #print(data.shape, data.T.head(2))
 #transform data
+print(data.head(3))
 transformed_data = np.arcsinh(data)
 logger.info(transformed_data.shape)
 logger.info(transformed_data.head(2))
@@ -77,6 +90,29 @@ logger.info('overlap dict:' + str(len(liste2)))
 #sets
 overlap = genes & genes2 #[gene for gene in genes if gene in genes2]
 logger.info('overlapping on cell lines:' + str(len(overlap)))
+
+
+def get_distributions(df, genes, bins=100):
+
+    return pd.DataFrame(
+        [np.histogram(df[gene].values, bins=bins, density=True)[0].tolist() for gene in genes],
+        index=genes
+    )
+
+# jensen shanon:
+bins=4
+scaled_data_prob = get_distributions(scaled_data, overlap, bins=bins)
+df_prob = get_distributions(df, overlap, bins=bins)
+js = []
+for gene in overlap:
+    js.append(jensenshannon(scaled_data_prob.loc[gene], df_prob.loc[gene], 2))
+#logger.enable("my_library")
+logger.info(len(js))
+sns.distplot(js, kde=True)
+plt.xlim(0, 1)
+plt.xlabel('jesen-shannon divergence')
+plt.show()
+plt.savefig(f'data/js_{files}.pdf')
 
 # wilcoxon test:
 #print(wilcoxon(scaled_data.values.flatten(), data2.values.flatten()))
@@ -135,27 +171,6 @@ print("wilcoxon mannwhitneyu flatten:", q_vals_mannwhitneyu_flatten)
 plt.clf()
 sys.stdout.close()
 
-def get_distributions(df, genes, bins=100):
-
-    return pd.DataFrame(
-        [np.histogram(df[gene].values, bins=bins, density=True)[0].tolist() for gene in genes],
-        index=genes
-    )
-
-# jensen shanon:
-bins=4
-scaled_data_prob = get_distributions(scaled_data, overlap, bins=bins)
-df_prob = get_distributions(df, overlap, bins=bins)
-js = []
-for gene in overlap:
-    js.append(jensenshannon(scaled_data_prob.loc[gene], df_prob.loc[gene], 2))
-#logger.enable("my_library")
-logger.info(len(js))
-sns.distplot(js, kde=True)
-plt.xlim(0, 1)
-plt.xlabel('jesen-shannon divergence')
-plt.show()
-plt.savefig(f'data/js_{files}.pdf')
 #js = pd.DataFrame(pairwise_distances(scaled_data_prob, df_prob, metric=jensenshannon), index=overlap, columns=overlap)
 
 #print(jensenshannon(scaled_data, data2))
