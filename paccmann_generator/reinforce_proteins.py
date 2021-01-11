@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 import torch
 import torch.nn.functional as F
+from rdkit.Chem import Descriptors
 from .drug_evaluators import (
     QED, SCScore, ESOL, SAS, Lipinski, Tox21, SIDER, ClinTox, OrganDB
 )
@@ -399,6 +400,7 @@ class ReinforceProtein(Reinforce):
                 x += self.clintox_weight * self.clintox(s)
             if self.organdb_weight > 0.:
                 x += self.organdb_weight * self.organdb(s)
+            x += 0.5 * Descriptors.MolWt(Chem.MolFromSmiles(s))/100
             return x
 
         # This is the joint reward function. Each score is normalized to be
@@ -528,10 +530,12 @@ class ReinforceProtein(Reinforce):
         # Get rewards (list, one reward for each valid smiles)
         rewards = self.get_reward(valid_smiles, protein, valid_idx, batch_size)
         reward_tensor = torch.unsqueeze(torch.Tensor(rewards), 1)
-
-        # valid_nums is a list of torch.Tensor, each with varying length,
-        padded_nums = torch.nn.utils.rnn.pad_sequence(valid_nums)
-        num_mols = padded_nums.shape[1]
+        try:
+            # valid_nums is a list of torch.Tensor, each with varying length,
+            padded_nums = torch.nn.utils.rnn.pad_sequence(valid_nums)
+            num_mols = padded_nums.shape[1]
+        except(IndexError):
+            print(valid_nums, valid_smiles)
 
         self.generator.decoder._update_batch_size(num_mols)
 
@@ -569,5 +573,5 @@ class ReinforceProtein(Reinforce):
                 list(self.encoder.parameters()), self.grad_clipping
             )
         self.optimizer.step()
-        return summed_reward, rl_loss.item()
+        return summed_reward, rl_loss.item(), valid_smiles, valid_idx
 
