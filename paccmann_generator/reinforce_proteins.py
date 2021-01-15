@@ -378,6 +378,22 @@ class ReinforceProtein(Reinforce):
         else:
             return valid_smiles, valid_idx
 
+    def get_C_fraction(self, smiles):
+        """get the fraction of C atoms in the molecule
+
+        Args:
+            smiles (list): A list of SMILES strings.
+
+        Returns:
+            list: a list of the fractions of C atmons per molecule.
+        """
+        tot = 0
+        if smiles:
+            if len(smiles) is not 0:
+                C = [1 for i in smiles if i=='C' or i=='c'].count(1)
+                tot = (C/Chem.MolFromSmiles(smiles).GetNumAtoms()) #get sometimes a div by 0 error
+        return tot
+
     def update_reward_fn(self, params):
         """ Set the reward function
         
@@ -400,7 +416,15 @@ class ReinforceProtein(Reinforce):
                 x += self.clintox_weight * self.clintox(s)
             if self.organdb_weight > 0.:
                 x += self.organdb_weight * self.organdb(s)
-            x += 0.5 * Descriptors.MolWt(Chem.MolFromSmiles(s))/100
+            #get fraction of C atoms (already in a range of 0 and 1)
+            dev = np.absolute(0.85 - self.get_C_fraction(s))
+            x += 0.5 * 1 / (1 + np.exp(5*dev-3)) #
+            # get the length of the molecules
+            length = Chem.MolFromSmiles(s).GetNumAtoms()
+            x += 0.5 * 1-(1/(1+np.exp(0.5*length-4)))
+            # get the moleculat weight 
+            wt = Descriptors.MolWt(Chem.MolFromSmiles(s))
+            x += 0.5 * (1- (1 / (1 + np.exp(0.05*wt-34))))
             return x
 
         # This is the joint reward function. Each score is normalized to be
@@ -458,8 +482,13 @@ class ReinforceProtein(Reinforce):
         pred, pred_dict = self.affinity_predictor(
             smiles_tensor, protein_tensor[idx]
         )
-
-        return np.squeeze(pred.detach().numpy())
+        aff = np.squeeze(pred.detach().numpy())
+        lmps = [
+            lmp if lmp > 0.5 else 0.0
+            for lmp in aff
+        ]
+        #print(type(lmps), type(aff))
+        return np.array(lmps) #np.squeeze(pred.detach().numpy())
 
     def smiles_to_numerical(self, smiles_list, target='predictor'):
         """
