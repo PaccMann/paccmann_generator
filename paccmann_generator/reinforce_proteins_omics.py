@@ -643,8 +643,8 @@ class ReinforceProteinOmics(Reinforce):
         if smiles:
             for s in smiles:
                 if len(s) is not 0:
-                    C = [1 for i in s if i=='C'].count(1)
-                    tot.append(C/len(s)) #get sometimes a div by 0 error
+                    C = [1 for i in s if i=='C' or i=='c'].count(1)
+                    tot.append(C/Chem.MolFromSmiles(smiles).GetNumAtoms()) #get sometimes a div by 0 error
         return tot
 
     def get_reward(self, valid_smiles, protein, cell_line, idx, batch_size):
