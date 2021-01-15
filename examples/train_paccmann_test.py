@@ -54,7 +54,7 @@ idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
 print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
 test_cell_line = omics_df['cell_line'].iloc[0]
-model_name = model_name + '_' + test_cell_line + '_lern' + str(params['learning_rate']) + '_weight2'
+model_name = model_name + '_' + test_cell_line + '_lern' + str(params['learning_rate']) + '_weightLenC_stepAff'
 #omics_df = omics_df[omics_df.histology == cancertype]
 
 # Load protein sequence data
@@ -314,6 +314,78 @@ eval_cell_lines = [test_cell_line]
 eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=False)
 eval_protein_names = [str(i) for i in eval_protein_names]
 
+def save_loss_reward(losses_p, rewards_p, smiles_steps, protein_steps, epoch, learner_protein):
+    # Plot loss development
+    loss_df = pd.DataFrame({'loss': losses_p, 'rewards': rewards_p, 'smiles':smiles_steps, 'proteins':protein_steps, 'epoch':epoch})
+    if epoch ==1:
+        loss_df.to_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv')
+    else:
+        loss_df.to_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv', mode='a', header=False)
+    losses_rewards_all = pd.read_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv', header = 0)
+    rewards_p_all = losses_rewards_all['rewards']
+    losses_p_all = losses_rewards_all['loss']
+    plot_loss(
+        losses_p_all,
+        rewards_p_all,
+        params['epochs'],
+        #protein_name,
+        learner_protein.model_path,
+        rolling=5
+    )
+    
+def train_and_save_steps(protein_name, epoch, params, protein_steps, smiles_steps, rewards_p, losses_p):
+    rew_p, loss_p, smiles_step, smiles_idx_steps = learner_protein.policy_gradient(
+        protein_name, epoch, params
+    )
+    print(f"Epoch {epoch:d}")
+    rewards_p.append(rew_p.item())
+    losses_p.append(loss_p)
+    smiles_steps.append(smiles_step)
+    proteins = (protein_name*params)[:params]
+    proteins = [proteins[idx] for idx in smiles_idx_steps]
+    protein_steps.append(proteins)
+    return losses_p, rewards_p, smiles_steps, protein_steps
+
+def generate_and_save(unbiased_predsP, protein_name, epoch, learner_protein, mode, param, gen_mols_p, gen_prot_p, gen_affinity_p, modes_p):
+    smiles_p, preds_p, idx_p = (
+        learner_protein.generate_compounds_and_evaluate(
+            epoch, param, protein_name
+        )
+    )
+    proteins = (protein_name*param)[:param]
+    proteins = [proteins[idx] for idx in idx_p]
+    proteins = [p for i, p in enumerate(proteins) if preds_p[i] > 0.5]
+    gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
+    gp_protein = preds_p[preds_p > 0.5]
+    for p, s, prot in zip(gp_protein, gs_protein, proteins):
+        gen_mols_p.append(s)
+        gen_prot_p.append(prot)
+        gen_affinity_p.append(p)
+        modes_p.append(mode)
+
+    plot_and_compare_proteins(
+            unbiased_predsP, preds_p, protein_name, epoch, learner_protein.model_path,
+            mode, param
+        )
+    
+    if mode == 'test':
+        df = pd.DataFrame(
+            {
+                'protein': gen_prot_p,
+                'SMILES': gen_mols_p,
+                'Binding probability': gen_affinity_p,
+                'mode': modes_p,
+                'epoch': [epoch]*len(gen_mols_p), 
+                'validity': [round((len(preds_p)/param) * 100, 1)]*len(gen_mols_p)
+            }
+        )
+        if epoch ==1:
+            df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'))
+        else:
+            df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'), mode='a', header=False)
+
+    return gen_mols_p, gen_prot_p, gen_affinity_p, modes_p
+
 for epoch in range(1, params['epochs'] + 1):
     rewards, rl_losses, rewards_p, losses_p, rewards_o, losses_o = [], [], [], [], [], []
     protein_steps, smiles_steps = [], []
@@ -335,12 +407,11 @@ for epoch in range(1, params['epochs'] + 1):
         #protein_name = [np.random.choice(train_protein.index)]
         print(f'Current train proteins: {protein_name}')
 
+        losses_p, rewards_p, smiles_steps, protein_steps = train_and_save_steps(
+            protein_name, epoch, params['batch_size'], protein_steps, smiles_steps, rewards_p, losses_p)
         # rew, loss = learner_combined.policy_gradient(
         #     protein_name, cell_line, epoch, params['batch_size']
         # )
-        rew_p, loss_p, smiles_step, smiles_idx_steps = learner_protein.policy_gradient(
-            protein_name, epoch, params['batch_size']
-        )
         # rew_o, loss_o = learner_omics.policy_gradient(
         #     cell_line, epoch, params['batch_size']
         # )
@@ -348,16 +419,9 @@ for epoch in range(1, params['epochs'] + 1):
         #     f"Epoch {epoch:d}/{params['epochs']:d}, step {step:d}/"
         #     f"{params['steps']:d}\t loss={loss:.2f}, rew={rew:.2f}"
         # )
-        print(f"Epoch {epoch:d}")
 
         # rewards.append(rew.item())
         # rl_losses.append(loss)
-        rewards_p.append(rew_p.item())
-        losses_p.append(loss_p)
-        smiles_steps.append(smiles_step)
-        proteins = (protein_name*params['batch_size'])[:params['batch_size']]
-        proteins = [proteins[idx] for idx in smiles_idx_steps]
-        protein_steps.append(proteins)
         # rewards_o.append(rew_o.item())
         # losses_o.append(loss_o)
 
@@ -367,6 +431,7 @@ for epoch in range(1, params['epochs'] + 1):
     learner_protein.save(f'gen_{epoch}.pt', f'enc_{epoch}.pt')
     unbiased_predsP = unbiased_preds_df[protein_name].values.reshape(-1)[:params['batch_size']]
     unbiased_predsO = unbiased_preds_df[cell_line].values.reshape(-1)[:params['batch_size']]
+    save_loss_reward(losses_p, rewards_p, smiles_steps, protein_steps, epoch, learner_protein)
     # base_smiles, base_predsP, base_predsO, idx = baseline.generate_compounds_and_evaluate(
     #     epoch, params['batch_size'], protein_name, cell_line
     # )
@@ -376,11 +441,13 @@ for epoch in range(1, params['epochs'] + 1):
     # smiles, predsP, predsO, idx_c = learner_combined.generate_compounds_and_evaluate(
     #     epoch, params['batch_size'], protein_name, cell_line
     # )
-    smiles_p, preds_p, idx_p = (
-        learner_protein.generate_compounds_and_evaluate(
-            epoch, params['batch_size'], protein_name
-        )
-    )
+    gen_mols_p, gen_prot_p, gen_affinity_p, modes_p = generate_and_save(unbiased_predsP, protein_name, epoch, 
+        learner_protein, 'train', params['batch_size'], gen_mols_p, gen_prot_p, gen_affinity_p, modes_p)
+    # smiles_p, preds_p, idx_p = (
+    #     learner_protein.generate_compounds_and_evaluate(
+    #         epoch, params['batch_size'], protein_name
+    #     )
+    # )
     # proteins = [val for i, val in enumerate(protein_name*params["batch_size"]) if i in idx_c]
     # cell = [val for i, val in enumerate(cell_line*params["batch_size"]) if i in idx_c]
     # gs = [
@@ -429,21 +496,21 @@ for epoch in range(1, params['epochs'] + 1):
     #     unbiased_predsO, preds_o, site, cell_line, epoch, learner_omics.model_path,
     #     'train_omics', params['batch_size']
     # )
-    proteins = (protein_name*params["batch_size"])[:params["batch_size"]]
-    proteins = [proteins[idx] for idx in idx_p]
-    proteins = [p for i, p in enumerate(proteins) if preds_p[i] > 0.5]
-    gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
-    gp_protein = preds_p[preds_p > 0.5]
-    for p, s, prot in zip(gp_protein, gs_protein, proteins):
-        gen_mols_p.append(s)
-        gen_prot_p.append(prot)
-        gen_affinity_p.append(p)
-        modes_p.append('train')
+    # proteins = (protein_name*params["batch_size"])[:params["batch_size"]]
+    # proteins = [proteins[idx] for idx in idx_p]
+    # proteins = [p for i, p in enumerate(proteins) if preds_p[i] > 0.5]
+    # gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
+    # gp_protein = preds_p[preds_p > 0.5]
+    # for p, s, prot in zip(gp_protein, gs_protein, proteins):
+    #     gen_mols_p.append(s)
+    #     gen_prot_p.append(prot)
+    #     gen_affinity_p.append(p)
+    #     modes_p.append('train')
 
-    plot_and_compare_proteins(
-            unbiased_predsP, preds_p, protein_name, epoch, learner_protein.model_path,
-            'train_protein', params['batch_size']
-        )
+    # plot_and_compare_proteins(
+    #         unbiased_predsP, preds_p, protein_name, epoch, learner_protein.model_path,
+    #         'train_protein', params['batch_size']
+    #     )
     
     # Evaluate on a validation cell line and protein.
     unbiased_predsP = unbiased_preds_df[eval_protein_names].values.reshape(-1)[:params['eval_batch_size']]
@@ -457,11 +524,13 @@ for epoch in range(1, params['epochs'] + 1):
     # smiles, predsP, predsO, idx_c = learner_combined.generate_compounds_and_evaluate(
     #     epoch, params['eval_batch_size'], eval_protein_names, eval_cell_lines
     # )
-    smiles_p, preds_p, idx_p = (
-        learner_protein.generate_compounds_and_evaluate(
-            epoch, params['eval_batch_size'], eval_protein_names
-        )
-    )
+    gen_mols_p, gen_prot_p, gen_affinity_p, modes_p =generate_and_save(unbiased_predsP, eval_protein_names, epoch, 
+        learner_protein, 'test', params['eval_batch_size'], gen_mols_p, gen_prot_p, gen_affinity_p, modes_p)
+    # smiles_p, preds_p, idx_p = (
+    #     learner_protein.generate_compounds_and_evaluate(
+    #         epoch, params['eval_batch_size'], eval_protein_names
+    #     )
+    # )
     
     # plot_and_compare(
     #     unbiased_predsO, predsO, site, eval_cell_lines, epoch, learner_combined.model_path,
@@ -478,10 +547,10 @@ for epoch in range(1, params['epochs'] + 1):
     #     'test_omics', params['eval_batch_size']
     # )
     
-    plot_and_compare_proteins(
-        unbiased_predsP, preds_p, eval_protein_names, epoch, learner_protein.model_path,
-        'test_protein', params['eval_batch_size']
-    )
+    # plot_and_compare_proteins(
+    #     unbiased_predsP, preds_p, eval_protein_names, epoch, learner_protein.model_path,
+    #     'test_protein', params['eval_batch_size']
+    # )
     # proteins = [val for i, val in enumerate(eval_protein_names*params["eval_batch_size"]) if i in idx_c]
     # cell = [val for i, val in enumerate(eval_cell_lines*params["eval_batch_size"]) if i in idx_c]
 
@@ -511,16 +580,16 @@ for epoch in range(1, params['epochs'] + 1):
     #     gen_cell_o.append(c)
     #     gen_ic50_o.append(p)
     #     modes_o.append('test')
-    proteins = (eval_protein_names*params["eval_batch_size"])[:params["eval_batch_size"]]
-    proteins = [proteins[idx] for idx in idx_p]
-    proteins = [p for i, p in enumerate(proteins) if preds_p[i] > 0.5]
-    gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
-    gp_protein = preds_p[preds_p > 0.5]
-    for p, s, prot in zip(gp_protein, gs_protein, proteins):
-        gen_mols_p.append(s)
-        gen_prot_p.append(prot)
-        gen_affinity_p.append(p)
-        modes_p.append('test')
+    # proteins = (eval_protein_names*params["eval_batch_size"])[:params["eval_batch_size"]]
+    # proteins = [proteins[idx] for idx in idx_p]
+    # proteins = [p for i, p in enumerate(proteins) if preds_p[i] > 0.5]
+    # gs_protein = [s for i, s in enumerate(smiles_p) if preds_p[i] > 0.5]
+    # gp_protein = preds_p[preds_p > 0.5]
+    # for p, s, prot in zip(gp_protein, gs_protein, proteins):
+    #     gen_mols_p.append(s)
+    #     gen_prot_p.append(prot)
+    #     gen_affinity_p.append(p)
+    #     modes_p.append('test')
     
     # inds = np.argsort(gp_o)[::-1]
     # for i in inds[:5]:
@@ -595,34 +664,34 @@ for epoch in range(1, params['epochs'] + 1):
     #     site=site
     # )
 
-    df = pd.DataFrame(
-        {
-            'protein': gen_prot_p,
-            'SMILES': gen_mols_p,
-            'Binding probability': gen_affinity_p,
-            'mode': modes_p,
-            'epoch': [epoch]*len(gen_mols_p), 
-            'validity': [round((len(preds_p)/params['batch_size']) * 100, 1)]*len(gen_mols_p)
-        }
-    )
-    if epoch ==1:
-        df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'))
-    else:
-        df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'), mode='a', header=False)
-    # Plot loss development
-    loss_df = pd.DataFrame({'loss': losses_p, 'rewards': rewards_p, 'smiles':smiles_steps, 'proteins':protein_steps, 'epoch':epoch})
-    if epoch ==1:
-        loss_df.to_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv')
-    else:
-        loss_df.to_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv', mode='a', header=False)
-    losses_p_all = pd.read_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv', header = 0)
-    rewards_p_all = losses_p_all['rewards']
-    losses_p_all = losses_p_all['loss']
-    plot_loss(
-        losses_p_all,
-        rewards_p_all,
-        params['epochs'],
-        #protein_name,
-        learner_protein.model_path,
-        rolling=5
-    )
+    # df = pd.DataFrame(
+    #     {
+    #         'protein': gen_prot_p,
+    #         'SMILES': gen_mols_p,
+    #         'Binding probability': gen_affinity_p,
+    #         'mode': modes_p,
+    #         'epoch': [epoch]*len(gen_mols_p), 
+    #         'validity': [round((len(preds_p)/params['batch_size']) * 100, 1)]*len(gen_mols_p)
+    #     }
+    # )
+    # if epoch ==1:
+    #     df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'))
+    # else:
+    #     df.to_csv(os.path.join(learner_protein.model_path, 'results', 'generated.csv'), mode='a', header=False)
+    # # Plot loss development
+    # loss_df = pd.DataFrame({'loss': losses_p, 'rewards': rewards_p, 'smiles':smiles_steps, 'proteins':protein_steps, 'epoch':epoch})
+    # if epoch ==1:
+    #     loss_df.to_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv')
+    # else:
+    #     loss_df.to_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv', mode='a', header=False)
+    # losses_p_all = pd.read_csv(learner_protein.model_path + '/results/loss_reward_evolution.csv', header = 0)
+    # rewards_p_all = losses_p_all['rewards']
+    # losses_p_all = losses_p_all['loss']
+    # plot_loss(
+    #     losses_p_all,
+    #     rewards_p_all,
+    #     params['epochs'],
+    #     #protein_name,
+    #     learner_protein.model_path,
+    #     rolling=5
+    # )
