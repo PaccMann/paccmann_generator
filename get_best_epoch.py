@@ -83,7 +83,7 @@ def get_metrics(file_path, file_name):
     # data = data.iloc[:10, :]
     # print(data.shape)
     C_frac = []
-    aroms, esols, qeds, sass, sc, logp, molWt = [],[], [], [], [], [], []
+    aroms, esols, qeds, sass, sc, logp, molWt, lens = [],[], [], [], [], [], [], []
     for i in data['SMILES']:
         if i is not np.nan:
             C_frac.append(get_C_fraction(i))
@@ -94,6 +94,7 @@ def get_metrics(file_path, file_name):
             sc.append(scscore(Chem.MolFromSmiles(i)))
             logp.append(penalized_logp(Chem.MolFromSmiles(i)))
             molWt.append(Descriptors.MolWt(Chem.MolFromSmiles(i)))
+            lens.append(Chem.MolFromSmiles(i).GetNumAtoms())
         else:
             C_frac.append(np.nan)
             aroms.append(np.nan)
@@ -103,6 +104,7 @@ def get_metrics(file_path, file_name):
             sc.append(np.nan)
             logp.append(np.nan)
             molWt.append(np.nan)
+            lens.append(np.nan)
 
     data['C_fraction'] = C_frac
     data['aromaticity'] = aroms
@@ -112,6 +114,7 @@ def get_metrics(file_path, file_name):
     data['scscore'] = sc
     data['penalized_logp'] = logp
     data['MolWt'] = molWt
+    data['len'] = lens
     print(data.head())
     data.to_csv('biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/generated_and_metrics.csv')
 
@@ -321,7 +324,7 @@ protein_encoder_rl_p.load(
 )
 protein_encoder_rl_p.eval()
 
-model_folder_name = site + '_' + model_name + '_lern0.0001_2_protein'
+model_folder_name = site + '_' + model_name + '_lern0.0001_C_frac0.8_protein'
 protein = ReinforceProtein(
     generator_rl_p, protein_encoder_rl_p, protein_predictor, protein_df, params,
     generator_smiles_language, model_folder_name, logger, remove_invalid
@@ -329,13 +332,13 @@ protein = ReinforceProtein(
 protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 
 for model in ['average']: # 'concat', 
-    for part in ['lern0.0001_2_protein']: #]: #,'omics', , 'combined'
+    for part in ['lern0.0001_C_frac0.8_protein']: #]: #,'omics', , 'combined'
         print(model, part)
         file_name = 'generated.csv'
         metrics_file = 'generated_and_metrics.csv'
         file_path = 'biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/'
         get_metrics(file_path, file_name)
-        # 1/0
+        1/0
         # file_path_coo = 'biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/grid_coordinates.csv'
         data = pd.read_csv(file_path + metrics_file, index_col = 0)
         reward = []
