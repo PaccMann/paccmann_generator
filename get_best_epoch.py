@@ -116,16 +116,30 @@ def get_metrics(file_path, file_name):
     data['MolWt'] = molWt
     data['len'] = lens
     print(data.head())
-    data.to_csv('biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/generated_and_metrics.csv')
+    data.to_csv('biased_models/liver_' + model + '_sanitized_' +test_cell_line+'_' + part + '/results/generated_and_metrics.csv')
 
+# setup logging
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+logger = logging.getLogger('train_paccmann_rl')
+logger_m = logging.getLogger('matplotlib')
+logger_m.setLevel(logging.WARNING)
 
+disable_rdkit_logging()
+params = dict()
+params['site'] = site
+params['cancertype'] = cancertype
+
+logger.info(f'Model with name {model_name} starts.')
+
+with open(params_path) as f:
+    params.update(json.load(f))
 omics_df = pd.read_pickle(omics_data_path)
 omics_df = add_avg_profile(omics_df)
 idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
-print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
-test_cell_line = omics_df['cell_line'].iloc[0]
-model_name = model_name + '_' + test_cell_line
+print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[2])
+test_cell_line = omics_df['cell_line'].iloc[6]
+model_name = model_name + '_' + test_cell_line  + '_lern0.0001' #+ str(params['learning_rate'])
 
 protein_df = pd.read_csv(protein_data_path, index_col=0)#, header=None, names=[str(x) for x in range(768)]) #'entry_name')
 protein_df = protein_df[~protein_df.index.isnull()]
@@ -137,25 +151,6 @@ protein_df = pd.concat([protein_df, protein_seq_df], axis=1, join='outer')
 protein_df = protein_df[[s.split('_')[0] in cancer_genes for s in protein_df.index]]
 #print(protein_df.head)
 print("proteins:", protein_df.index, len(cancer_genes))
-# setup logging
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-logger = logging.getLogger('train_paccmann_rl')
-logger_m = logging.getLogger('matplotlib')
-logger_m.setLevel(logging.WARNING)
-
-disable_rdkit_logging()
-
-params = dict()
-params['site'] = site
-params['cancertype'] = cancertype
-
-
-logger.info(f'Model with name {model_name} starts.')
-
-
-
-with open(params_path) as f:
-    params.update(json.load(f))
 
 # Define network
 with open(os.path.join(omics_model_path, 'model_params.json')) as f:
@@ -222,23 +217,23 @@ with open(os.path.join(protein_model_path, 'model_params.json')) as f:
 # )
 # cell_encoder.eval()
 
-# #load predictors
-# with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
-#     paccmann_params = json.load(f)
+#load predictors
+with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
+    paccmann_params = json.load(f)
 
-# paccmann_predictor = MODEL_FACTORY_OMICS['mca'](paccmann_params)
-# paccmann_predictor.load(
-#     os.path.join(
-#         ic50_model_path,
-#         f"weights/best_{params.get('ic50_metric', 'mse')}_mca.pt"
-#     ),
-#     map_location=get_device()
-# )
-# paccmann_predictor.eval()
-# paccmann_smiles_language = SMILESLanguage.load(
-#     os.path.join(ic50_model_path, 'smiles_language.pkl')
-# )
-# paccmann_predictor._associate_language(paccmann_smiles_language)
+paccmann_predictor = MODEL_FACTORY_OMICS['mca'](paccmann_params)
+paccmann_predictor.load(
+    os.path.join(
+        ic50_model_path,
+        f"weights/best_{params.get('ic50_metric', 'mse')}_mca.pt"
+    ),
+    map_location=get_device()
+)
+paccmann_predictor.eval()
+paccmann_smiles_language = SMILESLanguage.load(
+    os.path.join(ic50_model_path, 'smiles_language.pkl')
+)
+paccmann_predictor._associate_language(paccmann_smiles_language)
 
 with open(os.path.join(affinity_model_path, 'model_params.json')) as f:
     protein_pred_params = json.load(f)
@@ -272,67 +267,67 @@ protein_predictor._associate_language(affinity_protein_language)
 # #combined.eval()
 
 
-# gru_encoder_rl_o = StackGRUEncoder(mol_params)
-# gru_decoder_rl_o = StackGRUDecoder(mol_params)
-# generator_rl_o = TeacherVAE(gru_encoder_rl_o, gru_decoder_rl_o)
-# generator_rl_o.load(
-#     os.path.join(
-#         mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
-#     ),
-#     map_location=get_device()
-# )
-# generator_rl_o.eval()
-# #generator_rl._associate_language(generator_smiles_language)
-
-# cell_encoder_rl_o = ENCODER_FACTORY['dense'](cell_params)
-# cell_encoder_rl_o.load(
-#     os.path.join(
-#         omics_model_path,
-#         f"weights/best_{params.get('metric', 'both')}_encoder.pt"
-#     ),
-#     map_location=get_device()
-# )
-# cell_encoder_rl_o.eval()
-
-# model_folder_name = site + '_' + model_name + '_omics'
-# omics = ReinforceOmic(
-#     generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
-#     generator_smiles_language, model_folder_name, logger, remove_invalid
-# )
-# omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
-# #omics.eval()
-
-gru_encoder_rl_p = StackGRUEncoder(mol_params)
-gru_decoder_rl_p = StackGRUDecoder(mol_params)
-generator_rl_p = TeacherVAE(gru_encoder_rl_p, gru_decoder_rl_p)
-generator_rl_p.load(
+gru_encoder_rl_o = StackGRUEncoder(mol_params)
+gru_decoder_rl_o = StackGRUDecoder(mol_params)
+generator_rl_o = TeacherVAE(gru_encoder_rl_o, gru_decoder_rl_o)
+generator_rl_o.load(
     os.path.join(
         mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
     ),
     map_location=get_device()
 )
-generator_rl_p.eval()
+generator_rl_o.eval()
 #generator_rl._associate_language(generator_smiles_language)
 
-protein_encoder_rl_p = ENCODER_FACTORY['dense'](protein_params)
-protein_encoder_rl_p.load(
+cell_encoder_rl_o = ENCODER_FACTORY['dense'](cell_params)
+cell_encoder_rl_o.load(
     os.path.join(
-        protein_model_path,
+        omics_model_path,
         f"weights/best_{params.get('metric', 'both')}_encoder.pt"
     ),
     map_location=get_device()
 )
-protein_encoder_rl_p.eval()
+cell_encoder_rl_o.eval()
 
-model_folder_name = site + '_' + model_name + '_lern0.0001_C_frac0.8_protein'
-protein = ReinforceProtein(
-    generator_rl_p, protein_encoder_rl_p, protein_predictor, protein_df, params,
+model_folder_name = site + '_' + model_name + '_omics'
+omics = ReinforceOmic(
+    generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
     generator_smiles_language, model_folder_name, logger, remove_invalid
 )
-protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
+omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
+# #omics.eval()
+
+# gru_encoder_rl_p = StackGRUEncoder(mol_params)
+# gru_decoder_rl_p = StackGRUDecoder(mol_params)
+# generator_rl_p = TeacherVAE(gru_encoder_rl_p, gru_decoder_rl_p)
+# generator_rl_p.load(
+#     os.path.join(
+#         mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
+#     ),
+#     map_location=get_device()
+# )
+# generator_rl_p.eval()
+# #generator_rl._associate_language(generator_smiles_language)
+
+# protein_encoder_rl_p = ENCODER_FACTORY['dense'](protein_params)
+# protein_encoder_rl_p.load(
+#     os.path.join(
+#         protein_model_path,
+#         f"weights/best_{params.get('metric', 'both')}_encoder.pt"
+#     ),
+#     map_location=get_device()
+# )
+# protein_encoder_rl_p.eval()
+
+# model_folder_name = site + '_' + model_name + '_lern0.0001_C_frac0.8_protein'
+# protein = ReinforceProtein(
+#     generator_rl_p, protein_encoder_rl_p, protein_predictor, protein_df, params,
+#     generator_smiles_language, model_folder_name, logger, remove_invalid
+# )
+# protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 
 for model in ['average']: # 'concat', 
-    for part in ['lern0.0001_C_frac0.8_protein']: #]: #,'omics', , 'combined'
+    for part in ['lern0.0001_omics']: #]: #,'omics', , 'combined'
         print(model, part)
         file_name = 'generated.csv'
         metrics_file = 'generated_and_metrics.csv'
