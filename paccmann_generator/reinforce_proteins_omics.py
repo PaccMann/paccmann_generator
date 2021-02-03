@@ -895,7 +895,7 @@ class ReinforceProteinOmics(Reinforce):
                 list(self.encoder_omics.parameters()), self.grad_clipping
             )
         self.optimizer.step()
-        return summed_reward, rl_loss.item()
+        return summed_reward, rl_loss.item(), valid_smiles, valid_idx
 
     def plot_hist(self, log_preds, cell_line, epoch, batch_size):
         percentage = np.round(
