@@ -179,8 +179,8 @@ def plot_loss(
     #_ = cell_line.replace('_', ' ')
     ax2.plot(np.arange(len(rewards)), rewards, color='g')
     ax2.grid(True, axis='x', which='both')
-    ax2.ylabel('Achieved rewards', size=12).set_color('g')
-    ax2.title('PaccMann$^{\mathrm{RL}}$ \max reward at epoch:'+ str(int(idx/5)+1))
+    ax2.set_ylabel('Achieved rewards', size=12).set_color('g')
+    ax2.set_title('PaccMann$^{\mathrm{RL}}$ \ max reward at epoch:'+ str(int(idx/5)+1))
     fig.savefig(
         os.path.join(save_path, f'results/loss_ep_{epoch}')
     )
