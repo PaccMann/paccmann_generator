@@ -51,7 +51,7 @@ cancer_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-4
 model_name = 'average_sanitized'
 remove_invalid = True
 gen_epoch = "13"
-omics_epoch = "1"
+omics_epoch = "4"
 protein_epoch = "29" 
 
 def get_C_fraction(smiles):
@@ -79,11 +79,11 @@ scscore = SCScore()
 penalized_logp = PenalizedLogP()
 
 def get_metrics(file_path, file_name):
-    data = pd.read_csv(file_path + file_name, index_col = 0)
+    data = pd.read_csv(file_path + file_name) #, index_col = 0)
     # data = data.iloc[:10, :]
     # print(data.shape)
     C_frac = []
-    aroms, esols, qeds, sass, sc, logp, molWt, lens = [],[], [], [], [], [], [], []
+    aroms, esols, qeds, sass, sc, logp, molWt, lens, ic50 = [],[], [], [], [], [], [], [], []
     for i in data['SMILES']:
         if i is not np.nan:
             C_frac.append(get_C_fraction(i))
@@ -116,8 +116,54 @@ def get_metrics(file_path, file_name):
     data['MolWt'] = molWt
     data['len'] = lens
     print(data.head())
-    data.to_csv('biased_models/liver_' + model + '_sanitized_' +test_cell_line+'_' + part + '/results/generated_and_metrics.csv')
+    data.to_csv(file_path+'smiles_hepatoblastoma_omics_metrics.csv') #'biased_models/liver_' + model + '_sanitized_' +test_cell_line+'_' + part + '/results/generated_and_metrics.csv')
 
+
+def get_IC50(file_path, file_name):
+    data = pd.read_csv(file_path + file_name)
+    for idx in data.index:
+        if(data.loc[idx, 'cell_line']==test_cell_line):
+            mol = data.loc[idx,'SMILES']
+            
+            # gep_ts = []
+            # gep_t = torch.unsqueeze(
+            #     torch.Tensor(
+            #         omics.gep_df[
+            #             omics.gep_df['cell_line'] == test_cell_line  # yapf: disable
+            #         ].iloc[0].gene_expression.values
+            #     ),
+            #     0
+            # )
+            # gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+            # gep_ts = torch.as_tensor(gep_ts)
+            # gep_ts = gep_ts.repeat(1, 1)
+            # if gep_ts.size()[0]>1:
+            #     gep_ts = gep_ts[:1]
+
+
+            # smiles_t = omics.smiles_to_numerical([mol], target='predictor')
+            # gep_ts = []
+            # gep_t = torch.unsqueeze(
+            #         torch.Tensor(
+            #             omics.gep_df[
+            #                 omics.gep_df['cell_line'] == test_cell_line # yapf: disable
+            #             ].iloc[0].gene_expression.values
+            #         ),
+            #         0
+            #     )
+            # # Evaluate drugs
+            # gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+            # gep_ts = torch.as_tensor(gep_ts)
+            # gep_ts = gep_ts.repeat(1, 1)
+            # print(smiles_t.shape, gep_ts.shape)
+            # pred, pred_dict = omics.predictor(
+            #     smiles_t, gep_ts[0]
+            # )
+            # log_preds = omics.get_log_molar(np.squeeze(pred.detach().numpy()))
+            print(type([mol]), [mol], test_cell_line)
+            log_preds = omics.get_reward_paccmann([mol, mol], [test_cell_line], [True, True], 2)
+            print(mol, log_preds)
+    return 
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger('train_paccmann_rl')
@@ -137,7 +183,7 @@ omics_df = pd.read_pickle(omics_data_path)
 omics_df = add_avg_profile(omics_df)
 idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
-print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[2])
+print("omics data:", omics_df.shape)
 test_cell_line = omics_df['cell_line'].iloc[6]
 model_name = model_name + '_' + test_cell_line  + '_lern0.0001' #+ str(params['learning_rate'])
 
@@ -290,6 +336,7 @@ cell_encoder_rl_o.load(
 cell_encoder_rl_o.eval()
 
 model_folder_name = site + '_' + model_name + '_omics'
+print("model:", model_folder_name)
 omics = ReinforceOmic(
     generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
     generator_smiles_language, model_folder_name, logger, remove_invalid
@@ -331,8 +378,11 @@ for model in ['average']: # 'concat',
         print(model, part)
         file_name = 'generated.csv'
         metrics_file = 'generated_and_metrics.csv'
-        file_path = 'biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/'
-        get_metrics(file_path, file_name)
+        file_path = 'biased_models/liver_' + model + '_sanitized_'+test_cell_line+'_' + part + '/results/'
+        print("read file", 'biased_models/liver_' + model + '_sanitized_'+test_cell_line+'_' + part + '/results/')
+        #get_metrics(file_path, file_name)
+        get_metrics('~/data/', 'smiles_hepatoblastoma_omics.csv')
+        #get_IC50('~/data/', 'smiles_hepatoblastoma_omics.csv')
         1/0
         # file_path_coo = 'biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/grid_coordinates.csv'
         data = pd.read_csv(file_path + metrics_file, index_col = 0)
