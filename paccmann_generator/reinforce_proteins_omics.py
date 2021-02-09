@@ -7,6 +7,7 @@ import seaborn as sns
 import torch
 from rdkit import Chem
 import torch.nn.functional as F
+from paccmann_generator.drug_evaluators.aromatic_ring import AromaticRing
 
 from pytoda.transforms import LeftPadding, ToTensor
 from .drug_evaluators import (
@@ -19,8 +20,8 @@ from .reinforce import Reinforce
 class ReinforceProteinOmics(Reinforce):
 
     def __init__(
-        self, generator, encoder_protein, encoder_omics, affinity_predictor, 
-        efficacy_predictor, protein_df, gep_df, params, generator_smiles_language, model_name, logger, remove_invalid
+        self, generator, encoder_protein, encoder_omics, affinity_predictor, efficacy_predictor, protein_df, 
+        gep_df, params, generator_smiles_language, model_name, logger, remove_invalid, ensemble_type = 'average'
     ):
         """
         Constructor for the Reinforcement object.
@@ -51,6 +52,8 @@ class ReinforceProteinOmics(Reinforce):
 
         self.encoder_omics = encoder_omics
         self.encoder_omics.eval()
+
+        self.ensemble_type = ensemble_type
 
         a= list(self.generator.decoder.parameters())
         #a.extend(list(self.encoder.encoding.parameters()))
@@ -111,10 +114,7 @@ class ReinforceProteinOmics(Reinforce):
         Args:
             params (dict): Dict with (new) parameters
         """
-        #super().update_params(params)
-        self.update_new_params(params)
-
-         # critic: upper and lower bound of log(IC50) for de-normalization
+        # critic: upper and lower bound of log(IC50) for de-normalization
         self.ic50_min = params.get('IC50_min', -8.77435)
         self.ic50_max = params.get('IC50_max', 11.83146)
         # efficacy threshold: log(X mol) = thresh. thresh=0 -> 1 micromolar
@@ -123,6 +123,11 @@ class ReinforceProteinOmics(Reinforce):
         self.rewards = params.get('rewards', (11, 1))
         self.C_frac_weight = params.get('C_frac_weight', 0)
         self.C_frac = params.get('C_frac', 0.8)
+        self.aromaticity_weight = params.get('aromaticity_weight', 0)
+        
+        #super().update_params(params)
+        self.update_new_params(params)
+
 
     def update_new_params(self, params):
         # parameter for reward function
@@ -131,6 +136,7 @@ class ReinforceProteinOmics(Reinforce):
         self.esol = ESOL()
         self.sas = SAS()
         self.lipinski = Lipinski()
+        self.aromaticity = AromaticRing()
         self.clintox = ClinTox(
             params.get(
                 'clintox_path',
@@ -587,7 +593,7 @@ class ReinforceProteinOmics(Reinforce):
         self.paccmann_weight = params.get('paccmann_weight', 1.)
         self.affinity_weight = params.get('affinity_weight', 1.)
         self.C_frac_weight = params.get('C_frac_weight', 0)
-        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + self.qed_weight + self.scscore_weight + self.esol_weight
+        self.weight_tot = self.paccmann_weight + self.affinity_weight + self.tox21_weight + self.qed_weight + self.scscore_weight + self.esol_weight + self.aromaticity_weight
         
         def tox_f(s):
             x = 0
@@ -603,8 +609,10 @@ class ReinforceProteinOmics(Reinforce):
                 x += self.organdb_weight * self.organdb(s)
                 self.weight_tot += self.organdb_weight
             if self.C_frac_weight > 0.:
-                x += self.C_frac_weight * self.get_C_fraction(s)
-                self.weight_tot += -np.absolut(self.C_frac - self.C_frac_weight)
+                x += self.C_frac_weight * -np.absolut(self.C_frac - self.get_C_fraction(s))
+                self.weight_tot += self.C_frac_weight
+            #add aromaticity
+            x += self.aromaticity_weight * self.aromaticity(s)
             return x
 
         # This is the joint reward function. Each score is normalized to be
@@ -623,7 +631,7 @@ class ReinforceProteinOmics(Reinforce):
                         #self.sider_weight * self.sider(s) + 
                         #self.clintox_weight * self.clintox(s) +
                         #self.organdb_weight * self.organdb(s) for s in smiles
-                        tox_f(s) for s in smiles
+                        tox_f(s)/self.weight_tot for s in smiles
                     ]
                     # minimize the difference of fraction of C to C_frac
                 )
@@ -812,7 +820,13 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def together(self, latent_z_omics, latent_z_protein):
-        return self.together_mean(latent_z_omics, latent_z_protein)
+        if self.ensemble_type=='average':
+            return self.together_mean(latent_z_omics, latent_z_protein)
+        elif self.ensemble_type=='concat':
+            return self.together_concat(latent_z_omics, latent_z_protein)
+        else:
+            print("assumes to takes average")
+            return self.together_mean(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
         return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
