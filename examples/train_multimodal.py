@@ -74,67 +74,10 @@ print("proteins:", protein_df.index, len(cancer_genes))
 unbiased_preds_df = pd.read_csv(unbiased_predictions_path)
 
 def create_combined_model(ensemble_type):
-    # Define network
-    with open(os.path.join(omics_model_path, 'model_params.json')) as f:
-        cell_params = json.load(f)
-    cell_encoder = ENCODER_FACTORY['dense'](cell_params)
-    cell_encoder.load(
-        os.path.join(
-            omics_model_path,
-            f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
-        ),
-        map_location=get_device()
-    )
-    cell_encoder.eval()
-
-    # Restore SMILES Model
-    with open(os.path.join(mol_model_path, 'model_params.json')) as f:
-        mol_params = json.load(f)
-
-    gru_encoder = StackGRUEncoder(mol_params)
-    gru_decoder = StackGRUDecoder(mol_params)
-    generator = TeacherVAE(gru_encoder, gru_decoder)
-    generator.load(
-        os.path.join(
-            mol_model_path,
-            f"weights/best_{params.get('smiles_metric', 'rec')}.pt"
-        ),
-        map_location=get_device()
-    )
     # Load languages
     generator_smiles_language = SMILESLanguage.load(
         os.path.join(mol_model_path, 'selfies_language.pkl')
     )
-
-    # Restore protein model
-    with open(os.path.join(protein_model_path, 'model_params.json')) as f:
-        protein_params = json.load(f)
-
-    # Define network
-    protein_encoder = ENCODER_FACTORY['dense'](protein_params)
-    protein_encoder.load(
-        os.path.join(
-            protein_model_path,
-            f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
-        ),
-        map_location=get_device()
-    )
-    protein_encoder.eval()
-
-    # Restore omics model
-    with open(os.path.join(omics_model_path, 'model_params.json')) as f:
-        cell_params = json.load(f)
-
-    # Define network
-    cell_encoder = ENCODER_FACTORY['dense'](cell_params)
-    cell_encoder.load(
-        os.path.join(
-            omics_model_path,
-            f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
-        ),
-        map_location=get_device()
-    )
-    cell_encoder.eval()
 
     #load predictors
     with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
@@ -176,11 +119,11 @@ def create_combined_model(ensemble_type):
     protein_predictor._associate_language(affinity_smiles_language)
     protein_predictor._associate_language(affinity_protein_language)
 
-
-    #remove_invalid = remove_invalid
-
     #############################################
     # Create a fresh model that will be optimized
+    # Restore SMILES Model
+    with open(os.path.join(mol_model_path, 'model_params.json')) as f:
+        mol_params = json.load(f)
     gru_encoder_rl = StackGRUEncoder(mol_params)
     gru_decoder_rl = StackGRUDecoder(mol_params)
     generator_rl = TeacherVAE(gru_encoder_rl, gru_decoder_rl)
@@ -193,6 +136,9 @@ def create_combined_model(ensemble_type):
     generator_rl.eval()
     #generator_rl._associate_language(generator_smiles_language)
 
+    # Restore omics model
+    with open(os.path.join(omics_model_path, 'model_params.json')) as f:
+        cell_params = json.load(f)
     cell_encoder_rl = ENCODER_FACTORY['dense'](cell_params)
     cell_encoder_rl.load(
         os.path.join(
@@ -203,6 +149,9 @@ def create_combined_model(ensemble_type):
     )
     cell_encoder_rl.eval()
 
+    # Restore protein model
+    with open(os.path.join(protein_model_path, 'model_params.json')) as f:
+        protein_params = json.load(f)
     protein_encoder_rl = ENCODER_FACTORY['dense'](protein_params)
     protein_encoder_rl.load(
         os.path.join(
