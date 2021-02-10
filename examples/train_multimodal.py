@@ -220,28 +220,6 @@ def create_combined_model(ensemble_type):
         params, generator_smiles_language, model_folder_name, logger, remove_invalid, ensemble_type=ensemble_type
     )
     return combined
-concat_combined = create_combined_model('concat')
-average_combined = create_combined_model('average')
-
-# Split the samples for conditional generation and initialize training
-train_omics, test_omics = omics_data_splitter(
-    omics_df, site, params.get('test_fraction', 0.2)
-)
-#train_protein, test_protein = protein_data_splitter(
-#    protein_df, params.get('test_fraction', 0.2)
-#)
-train_protein = protein_df
-test_protein = protein_df
-print("test omics:", len(test_omics), ":test protein", test_protein.shape, ":train omics:", len(train_omics), ":train protein:", train_protein.shape)
-
-logger.info('Models restored, start training.')
-
-# choose a validation cell line and protein.
-#eval_cell_lines = np.random.choice(test_omics, size = 20, replace=True)
-#eval_cell_lines = [str(i) for i in eval_cell_lines]
-eval_cell_lines = [test_cell_line]
-eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=False)
-eval_protein_names = [str(i) for i in eval_protein_names]
 
 def save_loss_reward(losses, rewards, smiles_steps, epoch, learner, protein_steps=None, cells=None):
     #Plot loss development
@@ -398,6 +376,29 @@ def generate_and_save(epoch, learner, mode, param, gen_mols, unbiased_predsP=Non
             df.to_csv(os.path.join(learner.model_path, 'results', 'generated.csv'), mode='a', header=False)
 
     return gen_mols, prot, aff, cell, ic50, modes
+    
+concat_combined = create_combined_model('concat')
+average_combined = create_combined_model('average')
+
+# Split the samples for conditional generation and initialize training
+train_omics, test_omics = omics_data_splitter(
+    omics_df, site, params.get('test_fraction', 0.2)
+)
+#train_protein, test_protein = protein_data_splitter(
+#    protein_df, params.get('test_fraction', 0.2)
+#)
+train_protein = protein_df
+test_protein = protein_df
+print("test omics:", len(test_omics), ":test protein", test_protein.shape, ":train omics:", len(train_omics), ":train protein:", train_protein.shape)
+
+logger.info('Models restored, start training.')
+
+# choose a validation cell line and protein.
+#eval_cell_lines = np.random.choice(test_omics, size = 20, replace=True)
+#eval_cell_lines = [str(i) for i in eval_cell_lines]
+eval_cell_lines = [test_cell_line]
+eval_protein_names = np.random.choice(test_protein.index, size = 20, replace=False)
+eval_protein_names = [str(i) for i in eval_protein_names]
 
 for epoch in range(1, params['epochs'] + 1):
     rewards_average, losses_average, rewards_concat, losses_concat = [], [], [], []
