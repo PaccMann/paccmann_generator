@@ -297,6 +297,34 @@ learner_protein = ReinforceProtein(
 )
 models = [learner_combined, learner_omics, learner_protein]
 print_stuff=False
+
+#get latent space of the omics data:
+latent = []
+for gene in omics_df.cell_line:
+    latent.append(learner_omics.encode_cell_line(cell_line=[gene], batch_size=1).numpy().tolist()[0][0])
+assert(len(latent)==omics_df.shape[0])
+omics_df = omics_df.join(pd.DataFrame(
+    latent, 
+    index=omics_df.index, 
+    columns=range(128)
+))
+#omics_df['latent']=latent
+omics_df.to_csv('/home/tol/data/gsdc_omics_latent.csv')
+
+#get latent space of the protein data:
+latent = []
+for prot in protein_df.index:
+    latent.append(learner_protein.encode_protein(protein=[prot], batch_size=1).numpy().tolist()[0][0])
+assert(len(latent)==protein_df.shape[0])
+protein_df = protein_df.join(pd.DataFrame(
+    latent, 
+    index=protein_df.index, 
+    columns=range(128)
+))
+#protein_df['latent']=latent
+protein_df.to_csv('/home/tol/data/gsdc_proteins_latent.csv')
+1/0
+# get altent space of the generated smiles
 for model in models:
     data = pd.read_csv(glob.glob(os.path.join(model.model_path , 'generated*_fromPairs.csv'))[0])
     i=0
