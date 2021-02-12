@@ -14,6 +14,7 @@ from paccmann_generator.drug_evaluators.qed import QED
 from paccmann_generator.drug_evaluators.sas import SAS
 from paccmann_generator.drug_evaluators.scsore import SCScore
 from paccmann_generator.drug_evaluators.penalized_logp import PenalizedLogP
+from paccmann_generator.drug_evaluators.tox21 import Tox21
 import argparse
 import json
 import logging
@@ -77,8 +78,15 @@ qed = QED()
 sas = SAS()
 scscore = SCScore()
 penalized_logp = PenalizedLogP()
+tox = Tox21(model_path = "/home/tol/Tox21_deepchem")
 
 def get_metrics(file_path, file_name):
+    """compute the metrics and save them in a file.
+
+    Args:
+        file_path (string): the path to the files
+        file_name (string): the name of the file with the smiles.
+    """
     data = pd.read_csv(file_path + file_name) #, index_col = 0)
     # data = data.iloc[:10, :]
     # print(data.shape)
@@ -116,54 +124,44 @@ def get_metrics(file_path, file_name):
     data['MolWt'] = molWt
     data['len'] = lens
     print(data.head())
-    data.to_csv(file_path+'smiles_hepatoblastoma_omics_metrics.csv') #'biased_models/liver_' + model + '_sanitized_' +test_cell_line+'_' + part + '/results/generated_and_metrics.csv')
+    data.to_csv(file_path+'generated_and_metrics.csv')
 
 
 def get_IC50(file_path, file_name):
+    """prints the IC50 of of compounds from the test_cell_line
+
+    Args:
+        file_path (string): the path to the files
+        file_name (strin): the name of the file containing the smiles
+    """
     data = pd.read_csv(file_path + file_name)
     for idx in data.index:
         if(data.loc[idx, 'cell_line']==test_cell_line):
             mol = data.loc[idx,'SMILES']
-            
-            # gep_ts = []
-            # gep_t = torch.unsqueeze(
-            #     torch.Tensor(
-            #         omics.gep_df[
-            #             omics.gep_df['cell_line'] == test_cell_line  # yapf: disable
-            #         ].iloc[0].gene_expression.values
-            #     ),
-            #     0
-            # )
-            # gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-            # gep_ts = torch.as_tensor(gep_ts)
-            # gep_ts = gep_ts.repeat(1, 1)
-            # if gep_ts.size()[0]>1:
-            #     gep_ts = gep_ts[:1]
-
-
-            # smiles_t = omics.smiles_to_numerical([mol], target='predictor')
-            # gep_ts = []
-            # gep_t = torch.unsqueeze(
-            #         torch.Tensor(
-            #             omics.gep_df[
-            #                 omics.gep_df['cell_line'] == test_cell_line # yapf: disable
-            #             ].iloc[0].gene_expression.values
-            #         ),
-            #         0
-            #     )
-            # # Evaluate drugs
-            # gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-            # gep_ts = torch.as_tensor(gep_ts)
-            # gep_ts = gep_ts.repeat(1, 1)
-            # print(smiles_t.shape, gep_ts.shape)
-            # pred, pred_dict = omics.predictor(
-            #     smiles_t, gep_ts[0]
-            # )
-            # log_preds = omics.get_log_molar(np.squeeze(pred.detach().numpy()))
             print(type([mol]), [mol], test_cell_line)
             log_preds = omics.get_reward_paccmann([mol, mol], [test_cell_line], [True, True], 2)
             print(mol, log_preds)
     return 
+
+def get_tox(file_path, file_name):
+    """prints the toxicity of the compounds
+
+    Args:
+        file_path (string): the path to the files
+        file_name (strin): the name of the file containing the smiles
+    """
+    data = pd.read_csv(file_path + file_name)
+    for mol in data['SMILES']:
+        toxicity = tox(mol)
+        smiles_tensor = tox.preprocess_smiles(mol)
+        predictions, _ = tox.model(smiles_tensor)
+        predictions = predictions[0, :].detach().numpy()
+        #print(predictions)
+        pred = np.mean(predictions)
+        high = (predictions >= 0.5).sum()
+        print(mol, pred, high/len(predictions))
+    return 
+
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger('train_paccmann_rl')
@@ -184,7 +182,7 @@ omics_df = add_avg_profile(omics_df)
 idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
 print("omics data:", omics_df.shape)
-test_cell_line = omics_df['cell_line'].iloc[6]
+test_cell_line = omics_df['cell_line'].iloc[0]
 model_name = model_name + '_' + test_cell_line  + '_lern0.0001' #+ str(params['learning_rate'])
 
 protein_df = pd.read_csv(protein_data_path, index_col=0)#, header=None, names=[str(x) for x in range(768)]) #'entry_name')
@@ -237,31 +235,31 @@ generator_smiles_language = SMILESLanguage.load(
 with open(os.path.join(protein_model_path, 'model_params.json')) as f:
     protein_params = json.load(f)
 
-# # Define network
-# protein_encoder = ENCODER_FACTORY['dense'](protein_params)
-# protein_encoder.load(
-#     os.path.join(
-#         protein_model_path,
-#         f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
-#     ),
-#     map_location=get_device()
-# )
-# protein_encoder.eval()
+# Define network
+protein_encoder = ENCODER_FACTORY['dense'](protein_params)
+protein_encoder.load(
+    os.path.join(
+        protein_model_path,
+        f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
+    ),
+    map_location=get_device()
+)
+protein_encoder.eval()
 
-# # Restore omics model
-# with open(os.path.join(omics_model_path, 'model_params.json')) as f:
-#     cell_params = json.load(f)
+# Restore omics model
+with open(os.path.join(omics_model_path, 'model_params.json')) as f:
+    cell_params = json.load(f)
 
-# # Define network
-# cell_encoder = ENCODER_FACTORY['dense'](cell_params)
-# cell_encoder.load(
-#     os.path.join(
-#         omics_model_path,
-#         f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
-#     ),
-#     map_location=get_device()
-# )
-# cell_encoder.eval()
+# Define network
+cell_encoder = ENCODER_FACTORY['dense'](cell_params)
+cell_encoder.load(
+    os.path.join(
+        omics_model_path,
+        f"weights/best_{params.get('omics_metric','both')}_encoder.pt"
+    ),
+    map_location=get_device()
+)
+cell_encoder.eval()
 
 #load predictors
 with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
@@ -303,45 +301,45 @@ affinity_protein_language = ProteinLanguage.load(
 protein_predictor._associate_language(affinity_smiles_language)
 protein_predictor._associate_language(affinity_protein_language)
 
-# model_folder_name = site + '_' + model_name + '_combined'
+model_folder_name = site + '_' + model_name + '_combined'
 # combined = ReinforceProteinOmics(generator, protein_encoder, cell_encoder, \
 #     protein_predictor, paccmann_predictor, protein_df, omics_df, \
 #     params, generator_smiles_language, model_folder_name, logger, remove_invalid
 # )
 # combined.load("gen_"+gen_epoch+".pt", "enc_"+gen_epoch+"_protein.pt"
 # , "enc_"+gen_epoch+"_omics.pt")
-# #combined.eval()
+#combined.eval()
 
 
-gru_encoder_rl_o = StackGRUEncoder(mol_params)
-gru_decoder_rl_o = StackGRUDecoder(mol_params)
-generator_rl_o = TeacherVAE(gru_encoder_rl_o, gru_decoder_rl_o)
-generator_rl_o.load(
-    os.path.join(
-        mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
-    ),
-    map_location=get_device()
-)
-generator_rl_o.eval()
-#generator_rl._associate_language(generator_smiles_language)
+# gru_encoder_rl_o = StackGRUEncoder(mol_params)
+# gru_decoder_rl_o = StackGRUDecoder(mol_params)
+# generator_rl_o = TeacherVAE(gru_encoder_rl_o, gru_decoder_rl_o)
+# generator_rl_o.load(
+#     os.path.join(
+#         mol_model_path, f"weights/best_{params.get('metric', 'rec')}.pt"
+#     ),
+#     map_location=get_device()
+# )
+# generator_rl_o.eval()
+# generator_rl._associate_language(generator_smiles_language)
 
-cell_encoder_rl_o = ENCODER_FACTORY['dense'](cell_params)
-cell_encoder_rl_o.load(
-    os.path.join(
-        omics_model_path,
-        f"weights/best_{params.get('metric', 'both')}_encoder.pt"
-    ),
-    map_location=get_device()
-)
-cell_encoder_rl_o.eval()
+# cell_encoder_rl_o = ENCODER_FACTORY['dense'](cell_params)
+# cell_encoder_rl_o.load(
+#     os.path.join(
+#         omics_model_path,
+#         f"weights/best_{params.get('metric', 'both')}_encoder.pt"
+#     ),
+#     map_location=get_device()
+# )
+# cell_encoder_rl_o.eval()
 
-model_folder_name = site + '_' + model_name + '_omics'
-print("model:", model_folder_name)
-omics = ReinforceOmic(
-    generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
-    generator_smiles_language, model_folder_name, logger, remove_invalid
-)
-omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
+# model_folder_name = site + '_' + model_name + '_omics'
+# print("model:", model_folder_name)
+# omics = ReinforceOmic(
+#     generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
+#     generator_smiles_language, model_folder_name, logger, remove_invalid
+# )
+# omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
 # #omics.eval()
 
 # gru_encoder_rl_p = StackGRUEncoder(mol_params)
@@ -374,15 +372,18 @@ omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
 # protein.load("gen_"+protein_epoch+".pt", "enc_"+protein_epoch+".pt")
 
 for model in ['average']: # 'concat', 
-    for part in ['lern0.0001_omics']: #]: #,'omics', , 'combined'
+    for part in ['lern0.0001_aromaticity'+ str(params['aromaticity_weight'])+'_combined']: #]: #,'omics', , 'combined'
+        #get the right folders and files for the models
         print(model, part)
-        file_name = 'generated.csv'
+        file_name = 'smiles_hepatoblastoma_omics_metrics.csv'#'generated.csv'
         metrics_file = 'generated_and_metrics.csv'
-        file_path = 'biased_models/liver_' + model + '_sanitized_'+test_cell_line+'_' + part + '/results/'
+        file_path = '/home/tol/data/'#'biased_models/liver_' + model + '_sanitized_'+test_cell_line+'_' + part + '/results/'
         print("read file", 'biased_models/liver_' + model + '_sanitized_'+test_cell_line+'_' + part + '/results/')
+        #get the metrics
         #get_metrics(file_path, file_name)
-        get_metrics('~/data/', 'smiles_hepatoblastoma_omics.csv')
+        #get_metrics('~/data/', 'smiles_hepatoblastoma_omics.csv')
         #get_IC50('~/data/', 'smiles_hepatoblastoma_omics.csv')
+        get_tox(file_path, file_name)
         1/0
         # file_path_coo = 'biased_models/liver_' + model + '_sanitized_SNU-423_' + part + '/results/grid_coordinates.csv'
         data = pd.read_csv(file_path + metrics_file, index_col = 0)
