@@ -21,7 +21,7 @@ class ReinforceProteinOmics(Reinforce):
 
     def __init__(
         self, generator, encoder_protein, encoder_omics, affinity_predictor, efficacy_predictor, protein_df, 
-        gep_df, params, generator_smiles_language, model_name, logger, remove_invalid, ensemble_type = 'average'
+        gep_df, params, generator_smiles_language, model_name, logger, remove_invalid, ensemble_type='average', set_encoder=None
     ):
         """
         Constructor for the Reinforcement object.
@@ -107,6 +107,9 @@ class ReinforceProteinOmics(Reinforce):
                 )
             )
         )
+        if set_encoder is not None:
+            self.set_encoder = set_encoder
+            self.set_encoder.eval()
 
     def update_params(self, params):
         """Update parameter
@@ -620,7 +623,7 @@ class ReinforceProteinOmics(Reinforce):
         self.reward_fn = (
             lambda smiles, protein, cell, idx, batch_size: (
                 self.affinity_weight / self.weight_tot * self.get_reward_affinity(smiles, protein, idx, batch_size) + 
-                np.array([tox_f(s) for s in smiles]) +
+                #np.array([tox_f(s) for s in smiles]) +
                 self.paccmann_weight / self.weight_tot * self.get_reward_paccmann(smiles, cell, idx, batch_size) +
                 np.array(
                     [
@@ -649,10 +652,9 @@ class ReinforceProteinOmics(Reinforce):
         """
         tot = []
         if smiles:
-            for s in smiles:
-                if len(s) is not 0:
-                    C = [1 for i in s if i=='C' or i=='c'].count(1)
-                    tot.append(C/Chem.MolFromSmiles(smiles).GetNumAtoms()) #get sometimes a div by 0 error
+            if len(smiles) is not 0:
+                C = [1 for i in smiles if i=='C' or i=='c'].count(1)
+                tot.append(C/Chem.MolFromSmiles(smiles).GetNumAtoms()) #get sometimes a div by 0 error
         return tot
 
     def get_reward(self, valid_smiles, protein, cell_line, idx, batch_size):
@@ -819,17 +821,39 @@ class ReinforceProteinOmics(Reinforce):
         ]
         return 1 / (1 + np.exp(lmps))
 
+    def get_set(self, latent_cell_line, latent_protein, shuffle=False):
+        combined_set = torch.stack(
+            [
+                latent_cell_line.resize_((latent_cell_line.shape[1],latent_cell_line.shape[2])),
+                latent_protein.resize_((latent_protein.shape[1],latent_protein.shape[2]))
+            ]
+        ).permute(1, 0, 2)
+        if shuffle:
+            combined_set = combined_set[:, torch.randperm(2), :]
+        return combined_set
+
     def together(self, latent_z_omics, latent_z_protein):
         if self.ensemble_type=='average':
             return self.together_mean(latent_z_omics, latent_z_protein)
         elif self.ensemble_type=='concat':
             return self.together_concat(latent_z_omics, latent_z_protein)
+        elif self.ensemble_type=='set':
+            #TO-DO: get set encoder to get the latent set space
+            # get set
+            input_set = self.get_set(
+                latent_z_omics, latent_z_protein, shuffle=False
+            )
+            # Encode the set
+            c_n, h_n, r_n = self.set_encoder(input_set)
+            latent_z = torch.mean(torch.stack([c_n, h_n, r_n]), dim=0)
+            return latent_z[None, :, :]
         else:
             print("assumes to takes average")
             return self.together_mean(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
-        return torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
+        latent_z = torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
+        return latent_z.resize_((1,latent_z.shape[0],latent_z.shape[1]))
 
     def together_concat(self, latent_z_omics, latent_z_protein):
         latent_z_long = torch.cat((latent_z_protein, latent_z_omics),2).transpose(2,1)
@@ -877,7 +901,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # Batch processing
         lrps = 1
-        if self.generator.decoder.latent_dim == 2 * self.encoder_omics.latent_size:
+        if self.generator.decoder.latent_dim == 2 * latent_z.shape[2]:
             lrps = 2
         hidden = self.generator.decoder.latent_to_hidden(
             latent_z.repeat(
