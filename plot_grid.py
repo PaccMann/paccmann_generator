@@ -5,35 +5,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from ipywidgets import interact, interactive, fixed, interact_manual
-import ipywidgets as widgets
-#import plotly.graph_objects as go
-#from plotly.subplots import make_subplots
 import numpy as np
 
-
 def plotting_model(data, file_path, name):
-    # fig = make_subplots(rows=6, cols=3,subplot_titles=([i for i in data.index if i not in ['x','y']]))
-    # for ii, i in enumerate(data.index):
-    #     if (i not in ['x', 'y']):
-    #         print(i)
-    #         df = data.loc[[i,'x','y']]
-            
-    #         fig.append_trace(go.Scatter(
-    #             x = df.loc['x'],
-    #             y = df.loc['y'],
-    #             mode='markers',
-    #             marker=dict(
-    #                 size=2,
-    #                 color=df.loc[i], #set color equal to a variable
-    #                 colorscale='Viridis', # one of plotly colorscales
-    #                 showscale=True
-    #             )
-    #         ),
-    #         row = int(ii/3)+1,
-    #         col = int(ii%3)+1)
-    # fig.update_layout(height=1000, width=800)
-    # fig.show()
-    fig, axs = plt.subplots(6, 3, figsize=(20, 30))
+    fig, axs = plt.subplots(7, 3, figsize=(20, 30))
     for ii, i in enumerate(data.index):
         if (i not in ['x', 'y']):
             print(i)
@@ -43,7 +18,7 @@ def plotting_model(data, file_path, name):
             axs.flat[ii].set_title(i)
     plt.suptitle(name, fontsize=16)
     plt.show()
-    fig.savefig(file_path + "grid_metrics.pdf", transparent=False)
+    #fig.savefig(file_path + "grid_metrics.pdf", transparent=False)
 
 
 dict_models = {}
@@ -59,7 +34,7 @@ for model in ['average', 'concat']:
         #print(data)
         data.loc['FCD/UGTest',:] =data.loc['FCD/UGTest',:]/100
         data.loc['FCD/UGTrain',:] = data.loc['FCD/UGTrain',:]/100
-        data = data.drop('weight')
+        #data = data.drop('weight')
         tmp = [i for i in coordinates.loc[0]]
         data.loc['x'] = tmp
         tmp = [i for i in coordinates.loc[1]]
@@ -84,6 +59,4 @@ def plotting(dict_models):
         axs.flat[ii].set_title(i)
     plt.show()
     fig.savefig("grid_metrics.pdf", transparent=False)
-        # print(data.head())
-        # 1/0
     
