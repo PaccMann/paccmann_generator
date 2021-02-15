@@ -160,7 +160,7 @@ class Reinforce(object):
         Returns:
             tuple(list, list): SMILES and numericals.
         """
-        if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
+        if self.generator.decoder.latent_dim == 2 * latent.shape[2]:
             latent = latent.repeat(1, 1, 2)
         mols_numerical = self.generator.generate(
             latent,
