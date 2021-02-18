@@ -476,6 +476,7 @@ class ReinforceProteinOmics(Reinforce):
             protein (str): A string, the protein used to drive generator.
             cell_line (str): A string, the cell_line used to drive generator.
             primed_drug (str): SMILES string to prime the generator.
+            return_latent (boolean, optional): if the latent code should also be returned.
 
         Returns:
             np.array: Predictions from PaccMann.
@@ -664,6 +665,8 @@ class ReinforceProteinOmics(Reinforce):
             valid_smiles (list): A list of valid SMILES strings.
             protein (str): Name of the target protein.
             cell_line (str): String containing the cell line to index.
+            idx (list): The indices of the valid SMILES strings.
+            batch_size (int): the batch size.
         
         Returns:
             np.array: computed reward.
@@ -677,6 +680,8 @@ class ReinforceProteinOmics(Reinforce):
         Args:
             valid_smiles (list): A list of valid SMILES strings.
             protein (str): Name of target protein
+            idx (list): The indices of the valid SMILES strings.
+            batch_size (int): the batch size.
 
         Returns:
             np.array: computed reward (fixed to 1/(1+exp(x))).
@@ -709,34 +714,17 @@ class ReinforceProteinOmics(Reinforce):
         """
         Receives a list of SMILES.
         Converts it to a numerical torch Tensor according to smiles_language
-        """
 
+        Args:
+            smiles_list (list): A list of valid SMILES strings.
+            target (str, optional): the target type. Defaults to 'predictor'.
+
+        Returns:
+            Tenor: a numerical representation of the SMILES.
+        """
         if target == 'generator':
             # NOTE: Code for this in the normal REINFORCE class
             raise ValueError('Priming drugs not yet supported')
-
-        # TODO: Workaround since predictor does not understand aromatic carbons
-        #if self.remove_invalid:
-        #    smiles_list_new = []
-        #    for s in smiles_list:
-        #        try:
-        #            smiles_list_new.append(Chem.MolToSmiles(
-        #                    Chem.MolFromSmiles(s, sanitize=True), kekuleSmiles=True
-        #            ).replace(':', ''))
-        #        except:
-        #            print("error occured in smiles", s)
-        #            smiles_list_new.append('')
-        #else:
-        #    smiles_list_new = []
-        #    for s in smiles_list:
-        #        try:
-        #            smiles_list_new.append(Chem.MolToSmiles(
-        #                    Chem.MolFromSmiles(s, sanitize=False), kekuleSmiles=True
-        #            ).replace(':', ''))
-        #        except:
-        #            print("error occured in smiles", s)
-        #            smiles_list_new.append(s)
-        #smiles_list = smiles_list_new
 
         if target == 'efficacy':
             # Convert strings to numbers and padd length.
@@ -780,6 +768,8 @@ class ReinforceProteinOmics(Reinforce):
         Args:
             valid_smiles (list): A list of valid SMILES strings.
             cell_line (str): String containing the cell line to index.
+            idx (list): The indices of the valid SMILES strings.
+            batch_size (int): the batch size.
 
         Returns:
             np.array: computed reward (fixed to 1/(1+exp(x))).
@@ -822,6 +812,16 @@ class ReinforceProteinOmics(Reinforce):
         return 1 / (1 + np.exp(lmps))
 
     def get_set(self, latent_cell_line, latent_protein, shuffle=False):
+        """Combine both latent codes into a set. 
+
+        Args:
+            latent_cell_line (Tensor): the latent code of the omics profile
+            latent_protein (Tensor): the latent code of the protein profile
+            shuffle (bool, optional): whether the set should be shuffled. Defaults to False.
+
+        Returns:
+            Tensor: the set containing both latent codes.
+        """
         combined_set = torch.stack(
             [
                 latent_cell_line.resize_((latent_cell_line.shape[1],latent_cell_line.shape[2])),
@@ -833,9 +833,21 @@ class ReinforceProteinOmics(Reinforce):
         return combined_set
 
     def together(self, latent_z_omics, latent_z_protein):
+        """get the combined latent code from two embeddings
+
+        Args:
+            latent_z_omics (Tensor): the latent code of the omics profile
+            latent_z_protein (Tensor): the latent code of the protine profile
+
+        Returns:
+            Tensor: the combined latent code
+        """
         if self.ensemble_type=='average':
             return self.together_mean(latent_z_omics, latent_z_protein)
         elif self.ensemble_type=='concat':
+            latent_z_long = self.together_concat(latent_z_omics, latent_z_protein)
+            return ravanbakhsh_set_layer(latent_z_omics.size()[2], latent_z_long).transpose(2,1)
+        elif self.ensemble_type=='onlyConcat':
             return self.together_concat(latent_z_omics, latent_z_protein)
         elif self.ensemble_type=='set':
             #TO-DO: get set encoder to get the latent set space
@@ -852,13 +864,30 @@ class ReinforceProteinOmics(Reinforce):
             return self.together_mean(latent_z_omics, latent_z_protein)
 
     def together_mean(self, latent_z_omics, latent_z_protein):
+        """ The mean of the two latent codes.
+
+        Args:
+            latent_z_omics (Tensor): the latent code of the omics profile
+            latent_z_protein (Tensor): the latent code of the protine profile
+
+        Returns:
+            Tensor: the mean of both latent codes
+        """
         latent_z = torch.mean(torch.cat((latent_z_protein, latent_z_omics),0),0)
         return latent_z.resize_((1,latent_z.shape[0],latent_z.shape[1]))
 
     def together_concat(self, latent_z_omics, latent_z_protein):
+        """The the concatenation and ravanbakhsh layer output of the two latent codes.
+
+        Args:
+            latent_z_omics (Tensor): the latent code of the omics profile
+            latent_z_protein (Tensor): the latent code of the protine profile
+
+        Returns:
+            Tensor: the combined latent code.
+        """
         latent_z_long = torch.cat((latent_z_protein, latent_z_omics),2).transpose(2,1)
-        latent_z = ravanbakhsh_set_layer(latent_z_omics.size()[2], latent_z_long).transpose(2,1)
-        return latent_z
+        return latent_z_long
 
     def policy_gradient(self, protein, cell_line, epoch, batch_size=10):
         """
