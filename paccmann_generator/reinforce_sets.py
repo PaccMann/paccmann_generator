@@ -7,9 +7,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from paccmann_generator.drug_evaluators import (
-    ESOL, QED, SAS, SIDER, ClinTox, Lipinski, OrganDB, SCScore, Tox21
-)
+from paccmann_generator.drug_evaluators import QED, Tox21
 from paccmann_generator.reinforce import Reinforce
 from pytoda.transforms import LeftPadding, ToTensor
 
@@ -45,7 +43,7 @@ class ReinforceMultiModalSets(Reinforce):
             generator to maximize the custom reward function get_reward.
         """
 
-        super(ReinforceMultiModal, self).__init__(
+        super(ReinforceMultiModalSets, self).__init__(
             generator, encoder, params, model_name, logger
         )  # yapf: disable
 
@@ -98,54 +96,15 @@ class ReinforceMultiModalSets(Reinforce):
 
         self.rewards = params.get('rewards', (11, 1))
 
-        self.C_frac_weight = params.get('C_frac_weight', 0)
-        self.C_frac = params.get('C_frac', 0.8)
-
         self.update_reward_fn(params)
 
         self.qed = QED()
-        self.scscore = SCScore()
-        self.esol = ESOL()
-        self.sas = SAS()
-        self.lipinski = Lipinski()
 
-        self.clintox = ClinTox(
-            params.get(
-                'clintox_path',
-                os.path.join(
-                    os.path.expanduser('~'),
-                    'Box/Molecular_SysBio/data/cytotoxicity/models/ClinToxMulti'
-                )
+        if self.tox21_weight > 0.:
+            self.tox21 = Tox21(
+                params.get('tox21_path', os.path.join('..', 'data', 'models', 'Tox21'))
             )
-        )
-        self.sider = SIDER(
-            params.get(
-                'sider_path',
-                os.path.join(
-                    os.path.expanduser('~'),
-                    'Box/Molecular_SysBio/data/cytotoxicity/models/Sider'
-                )
-            )
-        )
-        self.tox21 = Tox21(
-            params.get(
-                'tox21_path',
-                os.path.join(
-                    os.path.expanduser('~'),
-                    'Box/Molecular_SysBio/data/cytotoxicity/models/Tox21_deepchem'
-                )
-            )
-        )
 
-        self.organdb = OrganDB(
-            params.get(
-                'organdb_path',
-                os.path.join(
-                    os.path.expanduser('~'),
-                    'Box/Molecular_SysBio/data/cytotoxicity/models/Organdb_github'
-                )
-            ), params['site']
-        )
         self.gamma = params.get('gamma', 0.99)
 
     def get_log_molar(self, y):
@@ -186,8 +145,7 @@ class ReinforceMultiModalSets(Reinforce):
             gep_t = torch.randn(1, self.encoder.latent_size)
         else:
             gep_t = torch.Tensor(
-                self.gep_df.loc[self.gep_df['cell_line'] == cell_line  # yapf: disable
-                                ][locations].values
+                self.gep_df.loc[self.gep_df['cell_line'] == cell_line][locations].values
             )
 
         combined_set = torch.stack(
@@ -314,21 +272,17 @@ class ReinforceMultiModalSets(Reinforce):
         Arguments:
             params (dict): Hyperparameter for PaccMann reward function
         """
-        self.clintox_weight = params.get('clintox_weight', 0.)
-        self.organdb_weight = params.get('organdb_weight', 0.)
-        self.sider_weight = params.get('sider_weight', 0.)
+
         self.qed_weight = params.get('qed_weight', 0.)
-        self.scscore_weight = params.get('scscore_weight', 0.)
-        self.esol_weight = params.get('esol_weight', 0.)
 
         self.tox21_weight = params.get('tox21_weight', .5)
 
         self.paccmann_weight = params.get('paccmann_weight', 1.)
         self.affinity_weight = params.get('affinity_weight', 1.)
-        self.C_frac_weight = params.get('C_frac_weight', 0)
+
         self.weight_tot = (
             self.paccmann_weight + self.affinity_weight + self.tox21_weight +
-            self.qed_weight + self.scscore_weight + self.esol_weight
+            self.qed_weight
         )
 
         self.reward_fn = (
@@ -338,15 +292,7 @@ class ReinforceMultiModalSets(Reinforce):
                 weight_tot * self.get_reward_paccmann(smiles, cell) + np.array(
                     [
                         self.qed_weight / self.weight_tot * self.qed(s) + self.
-                        scscore_weight / self.weight_tot *
-                        ((self.scscore(s) - 1) *
-                         (-1 / 4) + 1) + self.esol_weight / self.weight_tot *
-                        (1 if self.esol(s) > -8 and self.esol(s) < -2 else 0
-                         ) + self.tox21_weight / self.weight_tot * self.tox21(s)
-                        #self.sider_weight * self.sider(s) +
-                        #self.clintox_weight * self.clintox(s) +
-                        #self.organdb_weight * self.organdb(s) for s in smiles
-                        for s in smiles
+                        tox21_weight / self.weight_tot * self.tox21(s) for s in smiles
                     ]
                 )
             )
