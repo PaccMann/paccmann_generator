@@ -1,4 +1,4 @@
-"""PaccMann^RL: Protein-driven drug generation"""
+"""PaccMann^RL: Multi-modal drug generation"""
 import os
 from typing import List, Tuple
 
@@ -16,7 +16,7 @@ class ReinforceMultiModalSets(Reinforce):
 
     def __init__(
         self, generator: nn.Module, encoder: nn.Module, affinity_predictor: nn.Module,
-        efficacy_predictor: nn.Module, protein_df: pd.Dataframe, gep_df: pd.Dataframe,
+        efficacy_predictor: nn.Module, protein_df: pd.DataFrame, gep_df: pd.DataFrame,
         params: dict, model_name: str, logger
     ):
         """
@@ -436,8 +436,11 @@ class ReinforceMultiModalSets(Reinforce):
             cell_line, protein, batch_size, shuffle=True
         )
         # Encode the set
-        c_n, h_n, r_n = self.encoder(input_set)
-        latent_z = torch.mean(torch.stack([c_n, h_n, r_n]), dim=0)
+        encoder_output = self.encoder(input_set)
+        # The encoder output is a tuple of the cell's internal states and the read vector
+        # The latent_z can be any combination of these tuple elements. The mean of these
+        # tensors is used as the latent_z here.
+        latent_z = torch.mean(torch.stack(encoder_output), dim=0)
         # Produce molecules
         valid_smiles, valid_nums, valid_idx = self.get_smiles_from_latent(latent_z)
 
@@ -476,10 +479,5 @@ class ReinforceMultiModalSets(Reinforce):
         summed_reward = torch.mean(torch.Tensor(rewards))
         rl_loss.backward()
 
-        if self.grad_clipping is not None:
-            torch.nn.utils.clip_grad_norm_(
-                list(self.generator.decoder.parameters()) +
-                list(self.encoder.parameters()), self.grad_clipping
-            )
         self.optimizer.step()
         return summed_reward, rl_loss.item()
