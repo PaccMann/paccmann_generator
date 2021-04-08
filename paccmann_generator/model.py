@@ -32,10 +32,10 @@ from files import *
 
 class Model:
     
-    def __init__(self, modeltype, params, omics_df, protein_df, logger):
+    def __init__(self, modeltype, params, omics_df, protein_df, logger, model_folder_name=None):
         self.type = modeltype
         self.reset_metrics()
-        self.model = self.create_combined_model(params, omics_df, protein_df, logger)
+        self.model = self.create_combined_model(params, omics_df, protein_df, logger, model_folder_name)
 
     def reset_metrics(self):
         self.rewards, self.losses = [], []
@@ -43,7 +43,7 @@ class Model:
         self.gen_mols ,self.gen_prot, self.gen_affinity = [], [], []
         self.gen_cell, self.gen_ic50, self.modes = [], [], []
 
-    def create_combined_model(self, params, omics_df, protein_df, logger):
+    def create_combined_model(self, params, omics_df, protein_df, logger, model_folder_name):
         # Load languages
         generator_smiles_language = SMILESLanguage.load(
             os.path.join(mol_model_path, 'selfies_language.pkl')
@@ -132,7 +132,8 @@ class Model:
         )
         protein_encoder_rl.eval()
 
-        model_folder_name = site + '_' + self.type + '_' + model_name + '_combined2'
+        if (model_folder_name is None):
+            model_folder_name = site + '_' + self.type + '_' + model_name + '_combined'
         if self.type =='set':
             adapted_keys = ['encoder.lstm.weights_x', 'encoder.lstm.weights_h', 'encoder.lstm.weights_c', 'encoder.lstm.bias', 'encoder.memory_mapping.weight', 'encoder.memory_mapping.bias', 'decoder.lstm.weights_x', 'decoder.lstm.weights_h', 'decoder.lstm.weights_c', 'decoder.lstm.bias', 'decoder.output_layer.weight', 'decoder.output_layer.bias', 'decoder.prob_layer.0.weight', 'decoder.prob_layer.0.bias']
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -162,7 +163,7 @@ class Model:
             )
         return combined
           
-    def save_loss_reward(self, epoch):
+    def save_loss_reward(self, epoch, tot_epochs):
         #Plot loss development
         if(self.protein_steps is None):
             loss_df = pd.DataFrame({'loss': self.losses, 'rewards': self.rewards, 'smiles':self.smiles_steps, 'cell_line':self.cell_steps, 'epoch':epoch})
@@ -171,50 +172,50 @@ class Model:
         else:
             loss_df = pd.DataFrame({'loss': self.losses, 'rewards': self.rewards, 'smiles':self.smiles_steps, 'proteins':self.protein_steps, 'cell_line':self.cell_steps,  'epoch':epoch})
         if epoch ==1:
-            loss_df.to_csv(sef.model.model_path + '/results/loss_reward_evolution.csv')
+            loss_df.to_csv(self.model.model_path + '/results/loss_reward_evolution.csv')
         else:
-            loss_df.to_csv(sef.model.model_path + '/results/loss_reward_evolution.csv', mode='a', header=False)
-        losses_rewards_all = pd.read_csv(sef.model.model_path + '/results/loss_reward_evolution.csv', header = 0)
+            loss_df.to_csv(self.model.model_path + '/results/loss_reward_evolution.csv', mode='a', header=False)
+        losses_rewards_all = pd.read_csv(self.model.model_path + '/results/loss_reward_evolution.csv', header = 0)
         rewards_all = losses_rewards_all['rewards']
         losses_all = losses_rewards_all['loss']
         plot_loss(
             losses_all,
             rewards_all,
-            params['epochs'],
+            tot_epochs,
             #protein_name,
-            sef.model.model_path,
+            self.model.model_path,
             rolling=5
         )
         
-    def train_and_save_steps(self, batch_size, epoch, params, protein_name=protein_name, cell_line=cell_line):
+    def train_and_save_steps(self, batch_size, epoch, protein_name=None, cell_line=None):
         if (protein_name is None):
             rew, loss, smiles_step, smiles_idx_steps = self.model.policy_gradient(
-                cell_line, epoch, params
+                cell_line, epoch, batch_size
             )
-            cell = (cell_line*params)[:params]
+            cell = (cell_line*batch_size)[:batch_size]
             cell = [cell[idx] for idx in smiles_idx_steps]
             self.cell_steps.append(cell)
         elif (cell_line is None):
             rew, loss, smiles_step, smiles_idx_steps = self.model.policy_gradient(
-                protein_name, epoch, params
+                protein_name, epoch, batch_size
             )
-            proteins = (protein_name*params)[:params]
+            proteins = (protein_name*batch_size)[:batch_size]
             proteins = [proteins[idx] for idx in smiles_idx_steps]
             self.protein_steps.append(proteins)
         else:
             #### TO-DO change policy_gradient function of combined model to be similar to single ones.
             rew, loss, smiles_step, smiles_idx_steps = self.model.policy_gradient(
-                protein_name, cell_line, epoch, params
+                protein_name, cell_line, epoch, batch_size
             )
-            proteins = (protein_name*params)[:params]
+            proteins = (protein_name*batch_size)[:batch_size]
             proteins = [proteins[idx] for idx in smiles_idx_steps]
             self.protein_steps.append(proteins)
-            cell = (cell_line*params)[:params]
+            cell = (cell_line*batch_size)[:batch_size]
             cell = [cell[idx] for idx in smiles_idx_steps]
             self.cell_steps.append(cell)
 
         print(f"Epoch {epoch:d}")
-        self.reward.append(rew.item())
+        self.rewards.append(rew.item())
         self.losses.append(loss)
         self.smiles_steps.append(smiles_step)
 
