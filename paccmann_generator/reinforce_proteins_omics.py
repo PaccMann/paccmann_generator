@@ -397,6 +397,7 @@ class ReinforceProteinOmics(Reinforce):
             cell_mu = []
             cell_logvar = []
             gep_ts = []
+            print(cell_lines)
             for cell in cell_line:
                 gep_t = torch.unsqueeze(
                     torch.Tensor(
@@ -440,7 +441,6 @@ class ReinforceProteinOmics(Reinforce):
         )
 
         smiles_t_affinity = self.smiles_to_numerical(valid_smiles, target='affinity')
-        smiles_t_efficacy = self.smiles_to_numerical(valid_smiles, target='efficacy')
 
         # TODO: combine bowth predictors
         # Evaluate drugs
@@ -449,11 +449,7 @@ class ReinforceProteinOmics(Reinforce):
         )
         predP = np.squeeze(predP.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
-        # Evaluate drugs
-        predO, pred_dictO = self.efficacy_predictor(
-            smiles_t_efficacy, gep_ts[valid_idx]
-        )
-        log_predsO = self.get_log_molar(np.squeeze(predO.detach().numpy()))
+        log_predsO = self.get_IC50(valid_smiles, cell_line, idx, batch_size, gep_ts=gep_ts)
 
         if return_latent:
             return valid_smiles, predP, log_predsO, latent_z
@@ -761,7 +757,7 @@ class ReinforceProteinOmics(Reinforce):
 
         return smiles_tensor
     
-    def get_reward_paccmann(self, valid_smiles, cell_line, idx, batch_size):
+    def get_IC50(self, valid_smiles, cell_line, idx, batch_size, gep_ts=None):
         """
         Get the reward from PaccMann
 
@@ -782,22 +778,22 @@ class ReinforceProteinOmics(Reinforce):
         # If all SMILES are invalid, no reward is given
         if len(smiles_tensor) == 0:
             return 0
-
-        gep_ts = []
-        for cell in cell_line:
-            gep_t = torch.unsqueeze(
-                torch.Tensor(
-                    self.gep_df[
-                        self.gep_df['cell_line'] == cell  # yapf: disable
-                    ].iloc[0].gene_expression.values
-                ),
-                0
-            )
-            gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-        gep_ts = torch.as_tensor(gep_ts)
-        gep_ts = gep_ts.repeat(batch_size, 1)
-        if gep_ts.size()[0]>batch_size:
-            gep_ts = gep_ts[:batch_size]
+        if(gep_ts is None):
+            gep_ts = []
+            for cell in cell_line:
+                gep_t = torch.unsqueeze(
+                    torch.Tensor(
+                        self.gep_df[
+                            self.gep_df['cell_line'] == cell  # yapf: disable
+                        ].iloc[0].gene_expression.values
+                    ),
+                    0
+                )
+                gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
+            gep_ts = torch.as_tensor(gep_ts)
+            gep_ts = gep_ts.repeat(batch_size, 1)
+            if gep_ts.size()[0]>batch_size:
+                gep_ts = gep_ts[:batch_size]
 
         pred, pred_dict = self.efficacy_predictor(
             smiles_tensor, gep_ts[idx]
@@ -809,6 +805,27 @@ class ReinforceProteinOmics(Reinforce):
             lmp if lmp < self.ic50_threshold else 10
             for lmp in log_micromolar_pred
         ]
+        return log_micromolar_pred
+
+    def get_reward_paccmann(self, valid_smiles, cell_line, idx, batch_size, print_log=False):
+        """
+        Get the reward from PaccMann
+
+        Args:
+            valid_smiles (list): A list of valid SMILES strings.
+            cell_line (str): String containing the cell line to index.
+            idx (list): The indices of the valid SMILES strings.
+            batch_size (int): the batch size.
+
+        Returns:
+            np.array: computed reward (fixed to 1/(1+exp(x))).
+        """
+        log_micromolar_pred = self.get_IC50(valid_smiles, cell_line, idx, batch_size)
+        lmps = [
+            lmp if lmp < self.ic50_threshold else 10
+            for lmp in log_micromolar_pred
+        ]
+        if print_log: return log_micromolar_pred
         return 1 / (1 + np.exp(lmps))
 
     def get_set(self, latent_cell_line, latent_protein, shuffle=False):
@@ -845,7 +862,7 @@ class ReinforceProteinOmics(Reinforce):
         if self.ensemble_type=='average':
             return self.together_mean(latent_z_omics, latent_z_protein)
         elif self.ensemble_type=='concat':
-            latent_z_long = self.together_concat(latent_z_omics, latent_z_protein)
+            latent_z_long = self.together_concat(latent_z_omics, latent_z_protein).transpose(2,1)
             return ravanbakhsh_set_layer(latent_z_omics.size()[2], latent_z_long).transpose(2,1)
         elif self.ensemble_type=='onlyConcat':
             return self.together_concat(latent_z_omics, latent_z_protein)
@@ -886,7 +903,7 @@ class ReinforceProteinOmics(Reinforce):
         Returns:
             Tensor: the combined latent code.
         """
-        latent_z_long = torch.cat((latent_z_protein, latent_z_omics),2).transpose(2,1)
+        latent_z_long = torch.cat((latent_z_protein, latent_z_omics),2)
         return latent_z_long
 
     def policy_gradient(self, protein, cell_line, epoch, batch_size=10):
