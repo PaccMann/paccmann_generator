@@ -219,7 +219,7 @@ class ReinforceProteinOmics(Reinforce):
                 0
             )
             #gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-            cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
+            cell_mu_i, cell_logvar_i = self.encoder_omics.encoder(gep_t)
             cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
             cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
         #gep_ts = torch.as_tensor(gep_ts)
@@ -249,7 +249,7 @@ class ReinforceProteinOmics(Reinforce):
             batch_size (int): batch_size
         """
         if protein is None:
-            latent_z = torch.randn(1, batch_size, self.encoder.latent_size)
+            latent_z = torch.randn(1, batch_size, self.encoder_protein.encoder.latent_size)
         else:
             protein_mu = []
             protein_logvar = []
@@ -259,7 +259,7 @@ class ReinforceProteinOmics(Reinforce):
                         prot, encoder_uses_sequence=False, predictor_uses_sequence=True
                     )
                 )
-                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_mu_i, protein_logvar_i = self.encoder_protein.encoder(protein_encoder_tensor)
                 protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
                 protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
             protein_mu = torch.as_tensor(protein_mu)
@@ -348,8 +348,8 @@ class ReinforceProteinOmics(Reinforce):
 
         self.affinity_predictor.eval()
         self.efficacy_predictor.eval()
-        self.encoder.eval()
-        self.encoder_omics.eval()
+        self.encoder_protein.encoder.eval()
+        self.encoder_omics.encoder.eval()
         self.generator.eval()
 
         if protein is None:
@@ -368,7 +368,7 @@ class ReinforceProteinOmics(Reinforce):
                         prot, encoder_uses_sequence=False, predictor_uses_sequence=True
                     )
                 )
-                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_mu_i, protein_logvar_i = self.encoder_protein.encoder(protein_encoder_tensor)
                 protein_predictor_tensor.append(torch.unsqueeze(protein_predictor_tensor_i, 0).detach().numpy()[0][0])
                 protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
                 protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
@@ -413,7 +413,7 @@ class ReinforceProteinOmics(Reinforce):
                     0
                 )
                 gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-                cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
+                cell_mu_i, cell_logvar_i = self.encoder_omics.encoder(gep_t)
                 #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
                 cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
                 cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
@@ -487,8 +487,8 @@ class ReinforceProteinOmics(Reinforce):
 
         self.affinity_predictor.eval()
         self.efficacy_predictor.eval()
-        self.encoder.eval()
-        self.encoder_omics.eval()
+        self.encoder_protein.encoder.eval()
+        self.encoder_omics.encoder.eval()
         self.generator.eval()
 
         if protein is None:
@@ -508,7 +508,7 @@ class ReinforceProteinOmics(Reinforce):
                         prot, encoder_uses_sequence=False, predictor_uses_sequence=True
                     )
                 )
-                protein_mu_i, protein_logvar_i = self.encoder(protein_encoder_tensor)
+                protein_mu_i, protein_logvar_i = self.encoder_protein.encoder(protein_encoder_tensor)
                 protein_predictor_tensor.append(torch.unsqueeze(protein_predictor_tensor_i, 0).detach().numpy()[0][0])
                 protein_logvar.append(torch.unsqueeze(protein_logvar_i, 0).detach().numpy()[0][0])
                 protein_mu.append(torch.unsqueeze(protein_mu_i, 0).detach().numpy()[0][0])
@@ -553,7 +553,7 @@ class ReinforceProteinOmics(Reinforce):
                     0
                 )
                 gep_ts.append(torch.unsqueeze(gep_t,0).detach().numpy()[0][0])
-                cell_mu_i, cell_logvar_i = self.encoder_omics(gep_t)
+                cell_mu_i, cell_logvar_i = self.encoder_omics.encoder(gep_t)
                 #print(torch.unsqueeze(cell_mu_i, 0).detach().numpy())
                 cell_mu.append(torch.unsqueeze(cell_mu_i, 0).detach().numpy()[0][0])
                 cell_logvar.append(torch.unsqueeze(cell_logvar_i, 0).detach().numpy()[0][0])
@@ -980,8 +980,8 @@ class ReinforceProteinOmics(Reinforce):
 
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
-                list(self.generator.decoder.parameters()) + list(self.encoder.parameters()) +
-                list(self.encoder_omics.parameters()), self.grad_clipping
+                list(self.generator.decoder.parameters()) + list(self.encoder_protein.encoder.parameters()) +
+                list(self.encoder_omics.encoder.parameters()), self.grad_clipping
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item(), valid_smiles, valid_idx
@@ -1030,11 +1030,11 @@ class ReinforceProteinOmics(Reinforce):
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath_protein is not None:
-            self.encoder.load(
+            self.encoder_protein.encoder.load(
                 self.weights_path.format(encoder_filepath_protein), *args, **kwargs
             )
         if encoder_filepath_omics is not None:
-            self.encoder_omics.load(
+            self.encoder_omics.encoder.load(
                 self.weights_path.format(encoder_filepath_omics), *args, **kwargs
             )
 
@@ -1047,10 +1047,10 @@ class ReinforceProteinOmics(Reinforce):
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
         if encoder_filepath_omics is not None:
-            self.encoder_omics.save(
+            self.encoder_omics.encoder.save(
                 self.weights_path.format(encoder_filepath_omics), *args, **kwargs
             )
         if encoder_filepath_protein is not None:
-            self.encoder.save(
+            self.encoder_protein.encoder.save(
                 self.weights_path.format(encoder_filepath_protein), *args, **kwargs
             )
