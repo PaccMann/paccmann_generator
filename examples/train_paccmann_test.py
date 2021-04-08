@@ -19,7 +19,6 @@ from pytoda.proteins.protein_language import ProteinLanguage
 from paccmann_generator.utils import disable_rdkit_logging
 from paccmann_predictor.models import MODEL_FACTORY as MODEL_FACTORY_OMICS
 import sys
-#sys.path.append('/dataP/tol/paccmann_affinity')
 sys.path.append('/home/tol/paccmann_affinity')
 from paccmann_affinity.models.predictors import MODEL_FACTORY as MODEL_FACTORY_PROTEIN
 
@@ -53,9 +52,9 @@ omics_df = add_avg_profile(omics_df)
 idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
 print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
-test_cell_line = omics_df['cell_line'].iloc[1]
+test_cell_line = omics_df['cell_line'].iloc[0]
 print("test_cell_line:", test_cell_line)
-model_name = model_name + '_test'#+ test_cell_line + '_lern' + str(params['learning_rate']) 
+model_name = model_name + '_'+ test_cell_line + '_lern' + str(params['learning_rate'])+'_aromaticity' + str(params['aromaticity_weight'])
 #omics_df = omics_df[omics_df.histology == cancertype]
 
 # Load protein sequence data
@@ -109,7 +108,7 @@ generator.load(
     ),
     map_location=get_device()
 )
-# Load languages
+# Load language_paths
 generator_smiles_language = SMILESLanguage.load(
     os.path.join(mol_model_path, 'selfies_language.pkl')
 )
