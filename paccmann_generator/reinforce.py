@@ -50,10 +50,11 @@ class Reinforce(object):
             weight_decay=params.get('weight_decay', 0.00001)
         )
 
-        self.model_name = model_name
-        self.model_path = os.path.join(
-            params.get('model_folder', 'biased_models'), model_name
-        )
+        if model_name is not None:
+            self.model_name = model_name
+            self.model_path = os.path.join(
+                params.get('model_folder', 'biased_models'), model_name
+            )
         self.weights_path = os.path.join(self.model_path, 'weights/{}')
 
         self.smiles_to_tensor = ToTensor(self.device)
