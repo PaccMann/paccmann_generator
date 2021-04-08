@@ -417,14 +417,14 @@ class ReinforceProtein(Reinforce):
             if self.organdb_weight > 0.:
                 x += self.organdb_weight * self.organdb(s)
             #get fraction of C atoms (already in a range of 0 and 1)
-            dev = np.absolute(0.85 - self.get_C_fraction(s))
-            x += 0.5 * 1 / (1 + np.exp(5*dev-3)) #
-            # get the length of the molecules
-            length = Chem.MolFromSmiles(s).GetNumAtoms()
-            x += 0.5 * 1-(1/(1+np.exp(0.5*length-4)))
+            # dev = np.absolute(0.85 - self.get_C_fraction(s))
+            # x += 2 * 1 / (1 + np.exp(5*dev-3)) #
+            # # get the length of the molecules
+            # length = Chem.MolFromSmiles(s).GetNumAtoms()
+            # x += 2 * 1-(1/(1+np.exp(0.5*length-4)))
             # get the moleculat weight 
-            wt = Descriptors.MolWt(Chem.MolFromSmiles(s))
-            x += 0.5 * (1- (1 / (1 + np.exp(0.05*wt-34))))
+            #wt = Descriptors.MolWt(Chem.MolFromSmiles(s))
+            #x += 1 * (1- (1 / (1 + np.exp(0.05*wt-34))))
             return x
 
         # This is the joint reward function. Each score is normalized to be
