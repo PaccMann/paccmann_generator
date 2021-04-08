@@ -468,7 +468,7 @@ class ReinforceOmic(Reinforce):
             lmp if lmp < self.ic50_threshold else 10
             for lmp in log_micromolar_pred
         ]
-        return 1 / (1 + np.exp(lmps))
+        return 1 / (1 + np.exp(lmps)) #log_micromolar_pred #
 
     def policy_gradient(self, cell_line, epoch, batch_size=10):
         """
