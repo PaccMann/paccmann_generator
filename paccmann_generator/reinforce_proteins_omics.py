@@ -15,13 +15,15 @@ from .drug_evaluators import (
 )
 from .deepset import ravanbakhsh_set_layer
 from .reinforce import Reinforce
+from .reinforce_omics import ReinforceOmic
+from .reinforce_proteins import ReinforceProtein
 
 
 class ReinforceProteinOmics(Reinforce):
 
     def __init__(
         self, generator, encoder_protein, encoder_omics, affinity_predictor, efficacy_predictor, protein_df, 
-        gep_df, params, generator_smiles_language, model_name, logger, remove_invalid, ensemble_type='average', set_encoder=None
+        gep_df, params, params_omics, params_proteins, generator_smiles_language, model_name, logger, remove_invalid, ensemble_type='average', set_encoder=None
     ):
         """
         Constructor for the Reinforcement object.
@@ -46,12 +48,9 @@ class ReinforceProteinOmics(Reinforce):
             generator to maximize the custom reward function get_reward.
         """
 
-        super(ReinforceProteinOmics, self).__init__(
-            generator, encoder_protein, params, model_name, logger, remove_invalid
-        )  # yapf: disable
-
-        self.encoder_omics = encoder_omics
-        self.encoder_omics.eval()
+        # super(ReinforceProteinOmics, self).__init__(
+        #     generator, encoder_protein, params, model_name, logger, remove_invalid
+        # )  # yapf: disable
 
         self.ensemble_type = ensemble_type
 
@@ -67,14 +66,13 @@ class ReinforceProteinOmics(Reinforce):
 
         self.protein_df = protein_df
         
-        self.affinity_predictor = affinity_predictor
-        self.affinity_predictor.eval()
+        # self.affinity_predictor = affinity_predictor
+        # self.affinity_predictor.eval()
 
-        self.efficacy_predictor = efficacy_predictor
-        self.efficacy_predictor.eval()
+        # self.efficacy_predictor = efficacy_predictor
+        # self.efficacy_predictor.eval()
 
         self.gep_df = gep_df
-       # self.update_params(params) # its there twice
 
         self.pad_efficacy_smiles_predictor = LeftPadding(
             params['predictor_smiles_length'],
@@ -93,10 +91,17 @@ class ReinforceProteinOmics(Reinforce):
         self.update_params(params)
 
         self.generator_smiles_language = generator_smiles_language
-        #print(generator_smiles_language.__dict__)
-        #1/0
 
         self.remove_invalid = remove_invalid
+
+        self.encoder_omics = ReinforceOmic(None, encoder_omics, efficacy_predictor, gep_df, params_omics, 
+            generator_smiles_language, None, logger, remove_invalid)
+        self.encoder_omics.encoder.eval()
+
+        self.encoder_protein = ReinforceProtein(None, encoder_protein, affinity_predictor, protein_df, params_proteins, 
+            generator_smiles_language, None, logger, remove_invalid)
+
+        self.generator = generator
 
         self.tox21 = Tox21(
             params.get(
