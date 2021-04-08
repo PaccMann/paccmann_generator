@@ -188,7 +188,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # maximal length of generated molecules
         self.generate_len = params.get(
-            'generate_len', self.efficacy_predictor.params['smiles_padding_length'] - 2
+            'generate_len', self.enocder_omics.predictor.params['smiles_padding_length'] - 2
         )
 
         # smoothing factor for softmax during token sampling in decoder
@@ -305,7 +305,7 @@ class ReinforceProteinOmics(Reinforce):
             sequence_tensor = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.affinity_predictor.protein_language.
+                        self.enocder_protein.predictor.protein_language.
                         sequence_to_token_indexes(protein_sequence)
                     )
                 ), 0
@@ -346,8 +346,8 @@ class ReinforceProteinOmics(Reinforce):
         if primed_drug != ' ':
             raise ValueError('Drug priming not yet supported.')
 
-        self.affinity_predictor.eval()
-        self.efficacy_predictor.eval()
+        self.encoder_protein.predictor.eval()
+        self.encoder_omics.predictor.eval()
         self.encoder_protein.encoder.eval()
         self.encoder_omics.encoder.eval()
         self.generator.eval()
@@ -449,7 +449,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # TODO: combine bowth predictors
         # Evaluate drugs
-        predP, pred_dictP = self.affinity_predictor(
+        predP, pred_dictP = self.enocder_protein.predictor(
             smiles_t_affinity, protein_predictor_tensor[valid_idx]
         )
         predP = np.squeeze(predP.detach().numpy())
@@ -485,8 +485,8 @@ class ReinforceProteinOmics(Reinforce):
         if primed_drug != ' ':
             raise ValueError('Drug priming not yet supported.')
 
-        self.affinity_predictor.eval()
-        self.efficacy_predictor.eval()
+        self.encoder_protein.predictor.eval()
+        self.encoder_omics.predictor.eval()
         self.encoder_protein.encoder.eval()
         self.encoder_omics.encoder.eval()
         self.generator.eval()
@@ -705,7 +705,7 @@ class ReinforceProteinOmics(Reinforce):
         protein_tensor = protein_tensor.repeat(batch_size, 1)
         if protein_tensor.size()[0]>batch_size:
             protein_tensor = protein_tensor[:batch_size]
-        pred, pred_dict = self.affinity_predictor(
+        pred, pred_dict = self.enocder_protein.predictor(
             smiles_tensor, protein_tensor[idx]
         )
 
@@ -733,7 +733,7 @@ class ReinforceProteinOmics(Reinforce):
                 torch.unsqueeze(
                     self.smiles_to_tensor(
                         self.pad_efficacy_smiles_predictor(
-                            self.efficacy_predictor.smiles_language.
+                            self.encoder_omics.predictor.smiles_language.
                             smiles_to_token_indexes(smiles)
                         )
                     ), 0
@@ -745,7 +745,7 @@ class ReinforceProteinOmics(Reinforce):
                 torch.unsqueeze(
                     self.smiles_to_tensor(
                         self.pad_affinity_smiles_predictor(
-                            self.affinity_predictor.smiles_language.
+                            self.encoder_protein.predictor.smiles_language.
                             smiles_to_token_indexes(smiles)
                         )
                     ), 0
@@ -800,7 +800,7 @@ class ReinforceProteinOmics(Reinforce):
             if gep_ts.size()[0]>batch_size:
                 gep_ts = gep_ts[:batch_size]
 
-        pred, pred_dict = self.efficacy_predictor(
+        pred, pred_dict = self.encoder_omics.predictor(
             smiles_tensor, gep_ts[idx]
         )
         log_micromolar_pred = self.get_log_molar(
