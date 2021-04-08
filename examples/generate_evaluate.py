@@ -73,7 +73,7 @@ def generate(protein_df, test_cell_line, model, batch_size=50000):
             'affinity';preds
         }
     )
-    df.to_csv(model.model_path+"/generated_smiles_"+gen_epoch+".csv")
+    df.to_csv(model.model_path+"/generated_smiles_"+comb_epoch+".csv")
     
 def get_C_fraction(smiles):
         """get the fraction of C atoms in the molecule
@@ -100,13 +100,22 @@ sas = SAS()
 scscore = SCScore()
 penalized_logp = PenalizedLogP()
 
+def get_IC50(smiles, model, cell_line):
+    """prints the IC50 of of compounds and cell_line
+
+    Args:
+        smiles (string): the smiles representation of a compound
+        model (reinforce object): the trained model.
+        cell_line (string): the cell line
+    """
+    log_preds = model.get_reward_paccmann([smiles, smiles], [cell_line], [True, True], 2, print_log=True)
+    return log_preds[0]
+
 def get_metrics():
-    data = pd.read_csv(omics.model_path+"/generated_smiles_"+omics_epoch+".csv", index_col = 0)
-    # data = data.iloc[:10, :]
-    # print(data.shape)
+    data = pd.read_csv(omics.model_path+"/generated_smiles_"+comb_epoch+".csv", index_col = 0)
     C_frac = []
     aroms, esols, qeds, sass, sc, logp, molWt, lens = [],[], [], [], [], [], [], []
-    for i in data['SMILES']:
+    for idx, i in enumerate(data['SMILES']):
         if i is not np.nan:
             C_frac.append(get_C_fraction(i))
             aroms.append(arom(Chem.MolFromSmiles(i)))
@@ -117,6 +126,12 @@ def get_metrics():
             logp.append(penalized_logp(Chem.MolFromSmiles(i)))
             molWt.append(Descriptors.MolWt(Chem.MolFromSmiles(i)))
             lens.append(Chem.MolFromSmiles(i).GetNumAtoms())
+            for c in omics_df.cell_line:
+                data.loc[idx, 'IC50_'+c] = get_IC50(i, model.model , c)
+            tox_res = get_tox(i)
+            data.loc[idx, 'tox_mean'] = tox_res[0]
+            data.loc[idx, 'tox_frac'] = tox_res[1]
+            data.loc[idx, 'NrAromRing'] = NrAromRing(i)
         else:
             C_frac.append(np.nan)
             aroms.append(np.nan)
@@ -138,7 +153,7 @@ def get_metrics():
     data['MolWt'] = molWt
     data['len'] = lens
     print(data.head())
-    data.to_csv(omics.model_path+'/results/generated_test_smiles_and_metrics2.csv')
+    data.to_csv(omics.model_path+'/results/generated_smiles_"+comb_epoch+"_metrics.csv')
 
 # setup logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -166,9 +181,7 @@ test_cell_line ='HuH-7'#omics_df['cell_line'].iloc[0]
 
 model_name = 'average_sanitized'
 remove_invalid = True
-gen_epoch = "37"
-omics_epoch = "2"
-protein_epoch = "29" 
+comb_epoch = "37" 
 model_name = model_name + '_' + test_cell_line +'_lern' + str(params['learning_rate'])
 
 protein_df = pd.read_csv(protein_data_path, index_col=0)
@@ -182,8 +195,8 @@ print("proteins:", protein_df.index, len(cancer_genes))
 
 # load the model of the specified epoch
 model_folder_name = site + '_' + model_name + '_combined'
-model = Model('average', params, omics_df, protein_df, logger)
-model.model.load("gen_"+gen_epoch+".pt", "enc_"+gen_epoch+"_protein.pt", "enc_"+gen_epoch+"_omics.pt")
+model = Model('average', params, omics_df, protein_df, logger, model_folder_name)
+model.model.load("gen_"+comb_epoch+".pt", "enc_"+comb_epoch+"_protein.pt", "enc_"+comb_epoch+"_omics.pt")
 model.model.eval()
 
 generate(protein_df, test_cell_line, model.model)
