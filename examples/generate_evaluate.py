@@ -42,7 +42,7 @@ cancer_cell_lines = ['HUH-6-clone5','HuH-7','SNU-475','SNU-423','SNU-387','SNU-4
 
 def generate():
     batch_size1 = 150
-    batch_size = 10000
+    batch_size = 50000
     proteins = protein_df.index.tolist()
     cell_line = [test_cell_line]
     valid_smiles_batch_combined = []
@@ -50,41 +50,44 @@ def generate():
     valid_smiles_batch_proteins = []
     first_iter = None
     p, c = [], []
-    while(len(valid_smiles_batch_combined)<batch_size):
-        combined.generate_len = batch_size1
-        valid_smiles_c, idx = combined.generate_compound(
-                    batch_size1, proteins, cell_line
-        )
-        valid_smiles_batch_combined = np.append(valid_smiles_batch_combined, valid_smiles_c)
-        p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
-        c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
-        #print(len(valid_smiles_batch_combined), len(p), len(c))
-        print(len(valid_smiles_batch_combined))
-    df = pd.DataFrame(
-        {
-            'protein': p,
-            'cell_line': c,
-            'SMILES': valid_smiles_batch_combined
-        }
-    )
-    df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+".csv")
-    #savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+".csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
-    c = []
-    # while(len(valid_smiles_batch_omics)<batch_size):
-    #     omics.generate_len = batch_size1
-    #     valid_smiles_o, idx = omics.generate_compound(
-    #                 batch_size1, cell_line
+    # while(len(valid_smiles_batch_combined)<batch_size):
+    #     combined.generate_len = batch_size1
+    #     valid_smiles_c, predP, log_predsO, idx = combined.generate_compounds_and_evaluate(
+    #                 None, batch_size1, protein=proteins, cell_line=cell_line
     #     )
-    #     valid_smiles_batch_omics = np.append(valid_smiles_batch_omics, valid_smiles_o)
+    #     valid_smiles_batch_combined = np.append(valid_smiles_batch_combined, valid_smiles_c)
+    #     p = np.append(p, [val for i, val in enumerate(proteins*batch_size1) if i in idx])
     #     c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
-    #     print(len(valid_smiles_batch_omics))
+    #     #print(len(valid_smiles_batch_combined), len(p), len(c))
+    #     print(len(valid_smiles_batch_combined))
     # df = pd.DataFrame(
     #     {
+    #         'protein': p,
     #         'cell_line': c,
-    #         'SMILES': valid_smiles_batch_omics
+    #         'SMILES': valid_smiles_batch_combined
     #     }
     # )
-    # df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs_withoutEmpty.csv")
+    # df.to_csv(combined.model_path+"/generated_smiles_"+gen_epoch+".csv")
+    #savetxt(combined.model_path+"/generated_smiles_"+gen_epoch+".csv", valid_smiles_batch_combined, delimiter=',', fmt=('%s'))
+    c = []
+    log_preds = []
+    while(len(valid_smiles_batch_omics)<batch_size):
+        omics.generate_len = batch_size1
+        valid_smiles_o, log_predsO, idx = omics.generate_compounds_and_evaluate(
+                    None, batch_size1, cell_line=cell_line
+        )
+        valid_smiles_batch_omics = np.append(valid_smiles_batch_omics, valid_smiles_o)
+        c = np.append(c, [val for i, val in enumerate(cell_line*batch_size1) if i in idx])
+        log_preds = np.append(log_preds, log_predsO)
+        print(len(valid_smiles_batch_omics), len(log_preds))
+    df = pd.DataFrame(
+        {
+            'cell_line': c,
+            'SMILES': valid_smiles_batch_omics,
+            'IC50': log_preds
+        }
+    )
+    df.to_csv(omics.model_path+"/generated_smiles_"+omics_epoch+".csv")
     #savetxt(omics.model_path+"/generated_smiles_"+omics_epoch+"_fromPairs.csv", valid_smiles_batch_omics, delimiter=',', fmt=('%s'))
     # p = []
     # while(len(valid_smiles_batch_proteins)<batch_size):
@@ -131,7 +134,7 @@ scscore = SCScore()
 penalized_logp = PenalizedLogP()
 
 def get_metrics():
-    data = pd.read_csv(combined.model_path+"/generated_smiles_"+gen_epoch+".csv", index_col = 0)
+    data = pd.read_csv(omics.model_path+"/generated_smiles_"+omics_epoch+".csv", index_col = 0)
     # data = data.iloc[:10, :]
     # print(data.shape)
     C_frac = []
@@ -168,7 +171,7 @@ def get_metrics():
     data['MolWt'] = molWt
     data['len'] = lens
     print(data.head())
-    data.to_csv(combined.model_path+'/results/generated_test_smiles_and_metrics.csv')
+    data.to_csv(omics.model_path+'/results/generated_test_smiles_and_metrics2.csv')
 
 def latent_space(epoch_nr):
     models = [protein, omics] # combined, 
@@ -285,14 +288,14 @@ omics_df = add_avg_profile(omics_df)
 idx = [i in cancer_cell_lines for i in omics_df['cell_line']]
 omics_df  = omics_df[idx]
 print("omics data:", omics_df.shape, omics_df['cell_line'].iloc[0])
-test_cell_line = omics_df['cell_line'].iloc[0]
+test_cell_line ='HuH-7'#omics_df['cell_line'].iloc[0]
 
 model_name = 'average_sanitized'
 remove_invalid = True
 gen_epoch = "37"
-omics_epoch = "3"
+omics_epoch = "2"
 protein_epoch = "29" 
-model_name = model_name + '_' + test_cell_line +'_lern' + str(params['learning_rate']) +'_aromaticity'
+model_name = model_name + '_' + test_cell_line +'_lern' + str(params['learning_rate'])# +'_aromaticity'
 
 protein_df = pd.read_csv(protein_data_path, index_col=0)#, header=None, names=[str(x) for x in range(768)]) #'entry_name')
 protein_df = protein_df[~protein_df.index.isnull()]
@@ -411,12 +414,12 @@ protein_predictor._associate_language(affinity_smiles_language)
 protein_predictor._associate_language(affinity_protein_language)
 
 model_folder_name = site + '_' + model_name + '_combined'
-combined = ReinforceProteinOmics(generator, protein_encoder, cell_encoder, \
-    protein_predictor, paccmann_predictor, protein_df, omics_df, \
-    params, generator_smiles_language, model_folder_name, logger, remove_invalid
-)
-combined.load("gen_"+gen_epoch+".pt", "enc_"+gen_epoch+"_protein.pt"
-, "enc_"+gen_epoch+"_omics.pt")
+# combined = ReinforceProteinOmics(generator, protein_encoder, cell_encoder, \
+#     protein_predictor, paccmann_predictor, protein_df, omics_df, \
+#     params, generator_smiles_language, model_folder_name, logger, remove_invalid
+# )
+# combined.load("gen_"+gen_epoch+".pt", "enc_"+gen_epoch+"_protein.pt"
+# , "enc_"+gen_epoch+"_omics.pt")
 #combined.eval()
 
 
@@ -443,11 +446,11 @@ cell_encoder_rl_o.load(
 cell_encoder_rl_o.eval()
 
 model_folder_name = site + '_' + model_name + '_omics'
-# omics = ReinforceOmic(
-#     generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
-#     generator_smiles_language, model_folder_name, logger, remove_invalid
-# )
-# omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
+omics = ReinforceOmic(
+    generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
+    generator_smiles_language, model_folder_name, logger, remove_invalid
+)
+omics.load("gen_"+omics_epoch+".pt", "enc_"+omics_epoch+".pt")
 #omics.eval()
 
 # gru_encoder_rl_p = StackGRUEncoder(mol_params)
