@@ -184,5 +184,4 @@ def plot_loss(
     fig.savefig(
         os.path.join(save_path, f'results/loss_ep_{epoch}')
     )
-    print(os.path.join(save_path, f'results/loss_ep_{epoch}'))
     plt.clf()
