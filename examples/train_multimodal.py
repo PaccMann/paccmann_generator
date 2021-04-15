@@ -40,11 +40,18 @@ logger_m.setLevel(logging.WARNING)
 disable_rdkit_logging()
 
 params = dict()
+params_o, params_p = dict(), dict()
 params['site'] = site
+params_o['site'] = site
+params_p['site'] = site
 params['cancertype'] = cancertype
 
 with open(params_path) as f:
     params.update(json.load(f))
+with open(params_path) as f:
+    params_o.update(json.load(f))
+with open("examples/affinity/conditional_generator.json") as f:
+    params_p.update(json.load(f))
 
 # Load omics profiles for conditional generation,
 # complement with avg per site
@@ -68,14 +75,14 @@ protein_seq_df.index = [i.split('|')[2] for i in protein_seq_df.index]
 protein_df = pd.concat([protein_df, protein_seq_df], axis=1, join='outer')
 protein_df = protein_df[[s.split('_')[0] in cancer_genes for s in protein_df.index]]
 print("proteins:", protein_df.index, len(cancer_genes))
-        
+
 # Specifies the baseline model used for comparison
 unbiased_preds_df = pd.read_csv(unbiased_predictions_path)
 
 model_types = ['onlyConcat', 'concat', 'average', 'set']
 models = []
 for m in model_types:
-    model = Model(m, params, omics_df, protein_df, logger)
+    model = Model(m, params, params_o, params_p, omics_df, protein_df, logger, 'test')
     models.append(model)
 
 # Split the samples for conditional generation and initialize training
@@ -123,5 +130,6 @@ for epoch in range(1, params['epochs'] + 1):
     unbiased_predsO = unbiased_preds_df[eval_cell_lines].values.reshape(-1)[:params['eval_batch_size']]
     
     for m in models:
+        print(m.type)
         m.generate_and_save(epoch, 'test', params['eval_batch_size'], unbiased_predsP=unbiased_predsP, protein_name=eval_protein_names, 
             unbiased_predsO=unbiased_predsO, cell_line=eval_cell_lines)
