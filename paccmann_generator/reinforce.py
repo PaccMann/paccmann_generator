@@ -33,7 +33,16 @@ class Reinforce(object):
         super(Reinforce, self).__init__()
 
         self.generator = generator
-        self.generator.eval()
+        if(generator is not None):
+            self.generator.eval()
+            a= list(self.generator.decoder.parameters())
+            #a.extend(list(self.encoder.encoding.parameters()))
+            self.optimizer = torch.optim.Adam(
+                a,
+                lr=params.get('learning_rate', 0.0001),
+                eps=params.get('eps', 0.0001),
+                weight_decay=params.get('weight_decay', 0.00001)
+            )
 
         self.encoder = encoder
         self.encoder.eval()
@@ -41,25 +50,11 @@ class Reinforce(object):
         self.logger = logger
         self.device = get_device()
 
-        a= list(self.generator.decoder.parameters())
-        #a.extend(list(self.encoder.encoding.parameters()))
-        self.optimizer = torch.optim.Adam(
-            a,
-            lr=params.get('learning_rate', 0.0001),
-            eps=params.get('eps', 0.0001),
-            weight_decay=params.get('weight_decay', 0.00001)
+        self.model_name = model_name
+        self.model_path = os.path.join(
+            params.get('model_folder', 'biased_models'), model_name
         )
-
-        if model_name is not None:
-            self.model_name = model_name
-            self.model_path = os.path.join(
-                params.get('model_folder', 'biased_models'), model_name
-            )
         self.weights_path = os.path.join(self.model_path, 'weights/{}')
-
-        self.smiles_to_tensor = ToTensor(self.device)
-
-        self.remove_invalid = remove_invalid
 
         # If model does not yet exist, create it.
         if not os.path.isdir(self.model_path):
@@ -80,6 +75,10 @@ class Reinforce(object):
             self.logger.warning(
                 'Model exists already. Call model.load() to restore weights.'
             )
+
+        self.smiles_to_tensor = ToTensor(self.device)
+
+        self.remove_invalid = remove_invalid
 
     def update_params(self, params):
         # parameter for reward function
@@ -201,8 +200,6 @@ class Reinforce(object):
         else:
             imgs = [Chem.MolFromSmiles(s, sanitize=False) for s in smiles]
             valid_idxs = [ind for ind in range(len(imgs)) if (imgs[ind] is not None)]
-        # valid_idxs = [ind for ind, img in enumerate(imgs) if img is not None]
-
         if not valid_idxs:
             smiles, nums = [], []
         else:
@@ -234,7 +231,7 @@ class Reinforce(object):
         self.scscore_weight = params.get('scscore_weight', 0.)
         self.esol_weight = params.get('esol_weight', 0.)
 
-        self.tox21_weight = params.get('tox21_weight', .5)
+        self.tox21_weight = params.get('tox21_weight', 0)
         if self.tox21_weight > 0.:
             self.tox21 = Tox21(
                 params.get(
@@ -287,7 +284,7 @@ class Reinforce(object):
         self, generator_filepath=None, encoder_filepath=None, *args, **kwargs
     ):
         """Save Model to Path."""
-        if generator_filepath is not None:
+        if generator_filepath is not None and self.generator is not None:
             self.generator.save(
                 self.weights_path.format(generator_filepath), *args, **kwargs
             )
