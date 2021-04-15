@@ -43,8 +43,8 @@ class ReinforceProtein(Reinforce):
             generator, encoder, params, model_name, logger, remove_invalid
         )  # yapf: disable
 
-        self.affinity_predictor = predictor
-        self.affinity_predictor.eval()
+        self.predictor = predictor
+        self.predictor.eval()
 
         self.protein_df = protein_df
 
@@ -64,15 +64,6 @@ class ReinforceProtein(Reinforce):
 
         self.remove_invalid = remove_invalid
 
-        self.tox21 = Tox21(
-            params.get(
-                'tox21_path',
-                os.path.join(
-                    os.path.expanduser('~'), 'Box', 'Molecular_SysBio', 'data',
-                    'cytotoxicity', 'models', 'Tox21_deepchem'
-                )
-            )
-        )
 
     def update_params(self, params):
         """Update parameter
@@ -128,7 +119,7 @@ class ReinforceProtein(Reinforce):
         self.gamma = params.get('gamma', 0.99)
         # maximal length of generated molecules
         self.generate_len = params.get(
-            'generate_len', self.affinity_predictor.params['smiles_padding_length'] - 2
+            'generate_len', self.predictor.params['smiles_padding_length'] - 2
         )
         # smoothing factor for softmax during token sampling in decoder
         self.temperature = params.get('temperature', 0.8)
@@ -196,7 +187,7 @@ class ReinforceProtein(Reinforce):
             sequence_tensor_p = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.affinity_predictor.protein_language.
+                        self.predictor.protein_language.
                         sequence_to_token_indexes(protein_sequence) 
                     )
                 ), 0
@@ -244,7 +235,7 @@ class ReinforceProtein(Reinforce):
         if primed_drug != ' ':
             raise ValueError('Drug priming not yet supported.')
 
-        self.affinity_predictor.eval()
+        self.predictor.eval()
         self.encoder.eval()
         self.generator.eval()
 
@@ -294,7 +285,7 @@ class ReinforceProtein(Reinforce):
         smiles_t = self.smiles_to_numerical(valid_smiles, target='predictor')
 
         # Evaluate drugs
-        pred, pred_dict = self.affinity_predictor(
+        pred, pred_dict = self.predictor(
             smiles_t, protein_predictor_tensor[valid_idx]
         )
         pred = np.squeeze(pred.detach().numpy())
@@ -327,7 +318,7 @@ class ReinforceProtein(Reinforce):
         if primed_drug != ' ':
             raise ValueError('Drug priming not yet supported.')
 
-        self.affinity_predictor.eval()
+        self.predictor.eval()
         self.encoder.eval()
         self.generator.eval()
 
@@ -479,7 +470,7 @@ class ReinforceProtein(Reinforce):
         protein_tensor = protein_tensor.repeat(batch_size, 1)
         if protein_tensor.size()[0]>batch_size:
             protein_tensor = protein_tensor[:batch_size]
-        pred, pred_dict = self.affinity_predictor(
+        pred, pred_dict = self.predictor(
             smiles_tensor, protein_tensor[idx]
         )
         aff = np.squeeze(pred.detach().numpy())
@@ -519,7 +510,7 @@ class ReinforceProtein(Reinforce):
             torch.unsqueeze(
                 self.smiles_to_tensor(
                     self.pad_smiles_predictor(
-                        self.affinity_predictor.smiles_language.
+                        self.predictor.smiles_language.
                         smiles_to_token_indexes(smiles)
                     )
                 ), 0
