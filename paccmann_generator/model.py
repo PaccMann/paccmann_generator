@@ -32,10 +32,10 @@ from files import *
 
 class Model:
     
-    def __init__(self, modeltype, params, omics_df, protein_df, logger, model_folder_name=None):
+    def __init__(self, modeltype, params, params_o, params_p, omics_df, protein_df, logger, model_folder_name=None):
         self.type = modeltype
         self.reset_metrics()
-        self.model = self.create_combined_model(params, omics_df, protein_df, logger, model_folder_name)
+        self.model = self.create_combined_model(params, params_o, params_p, omics_df, protein_df, logger, model_folder_name)
 
     def reset_metrics(self):
         self.rewards, self.losses = [], []
@@ -43,7 +43,7 @@ class Model:
         self.gen_mols ,self.gen_prot, self.gen_affinity = [], [], []
         self.gen_cell, self.gen_ic50, self.modes = [], [], []
 
-    def create_combined_model(self, params, omics_df, protein_df, logger, model_folder_name):
+    def create_combined_model(self, params, params_o, params_p, omics_df, protein_df, logger, model_folder_name):
         # Load languages
         generator_smiles_language = SMILESLanguage.load(
             os.path.join(mol_model_path, 'selfies_language.pkl')
@@ -152,14 +152,14 @@ class Model:
             encoder_rl.latent_size = encoder_rl.hidden_size_encoder
             
             combined = ReinforceProteinOmics( 
-                generator_rl, protein_encoder_rl, cell_encoder_rl, \
-                protein_predictor, paccmann_predictor, protein_df, omics_df, params, generator_smiles_language, \
+                generator_rl, protein_encoder_rl, cell_encoder_rl, protein_predictor, \
+                paccmann_predictor, protein_df, omics_df, params, params_o, params_p, generator_smiles_language, \
                 model_folder_name, logger, remove_invalid, ensemble_type=self.type, set_encoder=encoder_rl)
         else:
             combined = ReinforceProteinOmics(
                 generator_rl, protein_encoder_rl, cell_encoder_rl, \
-                protein_predictor, paccmann_predictor, protein_df, omics_df, \
-                params, generator_smiles_language, model_folder_name, logger, remove_invalid, ensemble_type=self.type
+                protein_predictor, paccmann_predictor, protein_df, omics_df, params, params_o, params_p, \
+                generator_smiles_language, model_folder_name, logger, remove_invalid, ensemble_type=self.type
             )
         return combined
           
