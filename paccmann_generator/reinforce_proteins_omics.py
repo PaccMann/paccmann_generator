@@ -1,12 +1,12 @@
 """PaccMann^RL: Protein-driven drug generation"""
 import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
 from rdkit import Chem
 import torch.nn.functional as F
+from paccmann_predictor.utils.utils import get_device
 from paccmann_generator.drug_evaluators.aromatic_ring import AromaticRing
 
 from pytoda.transforms import LeftPadding, ToTensor
@@ -25,7 +25,7 @@ class ReinforceProteinOmics(Reinforce):
         self, generator, encoder_protein, encoder_omics, affinity_predictor, efficacy_predictor, protein_df, 
         gep_df, params, params_omics, params_proteins, generator_smiles_language, model_name, logger, remove_invalid, ensemble_type='average', set_encoder=None
     ):
-        """
+        """ 
         Constructor for the Reinforcement object.
 
         Args:
@@ -51,8 +51,20 @@ class ReinforceProteinOmics(Reinforce):
         # super(ReinforceProteinOmics, self).__init__(
         #     generator, encoder_protein, params, model_name, logger, remove_invalid
         # )  # yapf: disable
+        
+        self.encoder_omics = ReinforceOmic(None, encoder_omics, efficacy_predictor, gep_df, params_omics, 
+            generator_smiles_language, model_name, logger, remove_invalid)
+        self.encoder_omics.encoder.eval()
+
+        self.encoder_protein = ReinforceProtein(None, encoder_protein, affinity_predictor, protein_df, params_proteins,
+            generator_smiles_language, model_name, logger, remove_invalid)
+
+        self.generator = generator
 
         self.ensemble_type = ensemble_type
+
+        self.logger = logger
+        self.device = get_device()
 
         a= list(self.generator.decoder.parameters())
         #a.extend(list(self.encoder.encoding.parameters()))
@@ -92,16 +104,15 @@ class ReinforceProteinOmics(Reinforce):
 
         self.generator_smiles_language = generator_smiles_language
 
+        self.model_name = model_name
+        self.model_path = os.path.join(
+            params.get('model_folder', 'biased_models'), model_name
+        )
+        self.weights_path = os.path.join(self.model_path, 'weights/{}')
+
+        self.smiles_to_tensor = ToTensor(self.device)
+
         self.remove_invalid = remove_invalid
-
-        self.encoder_omics = ReinforceOmic(None, encoder_omics, efficacy_predictor, gep_df, params_omics, 
-            generator_smiles_language, None, logger, remove_invalid)
-        self.encoder_omics.encoder.eval()
-
-        self.encoder_protein = ReinforceProtein(None, encoder_protein, affinity_predictor, protein_df, params_proteins, 
-            generator_smiles_language, None, logger, remove_invalid)
-
-        self.generator = generator
 
         self.tox21 = Tox21(
             params.get(
@@ -115,6 +126,26 @@ class ReinforceProteinOmics(Reinforce):
         if set_encoder is not None:
             self.set_encoder = set_encoder
             self.set_encoder.eval()
+
+        # If model does not yet exist, create it.
+        if not os.path.isdir(self.model_path):
+            os.makedirs(
+                os.path.join(self.model_path, 'weights'), exist_ok=True
+            )
+            os.makedirs(
+                os.path.join(self.model_path, 'results'), exist_ok=True
+            )
+            # Save untrained models
+            self.save('generator_epoch_0.pt', 'encoder_epoch_0.pt')
+
+            with open(
+                os.path.join(self.model_path, 'model_params.json'), 'w'
+            ) as f:
+                json.dump(params, f)
+        else:
+            self.logger.warning(
+                'Model exists already. Call model.load() to restore weights.'
+            )
 
     def update_params(self, params):
         """Update parameter
@@ -188,7 +219,7 @@ class ReinforceProteinOmics(Reinforce):
 
         # maximal length of generated molecules
         self.generate_len = params.get(
-            'generate_len', self.enocder_omics.predictor.params['smiles_padding_length'] - 2
+            'generate_len', self.encoder_omics.predictor.params['smiles_padding_length'] - 2
         )
 
         # smoothing factor for softmax during token sampling in decoder
@@ -305,7 +336,7 @@ class ReinforceProteinOmics(Reinforce):
             sequence_tensor = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.enocder_protein.predictor.protein_language.
+                        self.encoder_protein.predictor.protein_language.
                         sequence_to_token_indexes(protein_sequence)
                     )
                 ), 0
@@ -402,7 +433,6 @@ class ReinforceProteinOmics(Reinforce):
             cell_mu = []
             cell_logvar = []
             gep_ts = []
-            print(cell_lines)
             for cell in cell_line:
                 gep_t = torch.unsqueeze(
                     torch.Tensor(
@@ -449,12 +479,12 @@ class ReinforceProteinOmics(Reinforce):
 
         # TODO: combine bowth predictors
         # Evaluate drugs
-        predP, pred_dictP = self.enocder_protein.predictor(
+        predP, pred_dictP = self.encoder_protein.predictor(
             smiles_t_affinity, protein_predictor_tensor[valid_idx]
         )
         predP = np.squeeze(predP.detach().numpy())
         #self.plot_hist(log_preds, cell_line, epoch, batch_size)
-        log_predsO = self.get_IC50(valid_smiles, cell_line, idx, batch_size, gep_ts=gep_ts)
+        log_predsO = self.get_IC50(valid_smiles, cell_line, valid_idx, batch_size, gep_ts=gep_ts)
 
         if return_latent:
             return valid_smiles, predP, log_predsO, latent_z
@@ -705,7 +735,7 @@ class ReinforceProteinOmics(Reinforce):
         protein_tensor = protein_tensor.repeat(batch_size, 1)
         if protein_tensor.size()[0]>batch_size:
             protein_tensor = protein_tensor[:batch_size]
-        pred, pred_dict = self.enocder_protein.predictor(
+        pred, pred_dict = self.encoder_protein.predictor(
             smiles_tensor, protein_tensor[idx]
         )
 
