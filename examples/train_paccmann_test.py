@@ -14,7 +14,7 @@ from paccmann_chemistry.utils import get_device
 from paccmann_generator.plot_utils import plot_and_compare, plot_and_compare_proteins, plot_loss
 from paccmann_generator.utils import add_avg_profile, omics_data_splitter, protein_data_splitter
 from paccmann_omics.encoders import ENCODER_FACTORY
-from pytoda.smiles.smiles_language import SMILESLanguage
+from pytoda.smiles.smiles_language import SMILESLanguage, SMILESTokenizer
 from pytoda.proteins.protein_language import ProteinLanguage
 from paccmann_generator.utils import disable_rdkit_logging
 from paccmann_predictor.models import MODEL_FACTORY as MODEL_FACTORY_OMICS
@@ -37,11 +37,18 @@ logger_m.setLevel(logging.WARNING)
 disable_rdkit_logging()
 
 params = dict()
+params_o, params_p = dict(), dict()
 params['site'] = site
+params_o['site'] = site
+params_p['site'] = site
 params['cancertype'] = cancertype
 
 with open(params_path) as f:
     params.update(json.load(f))
+with open(params_path) as f:
+    params_o.update(json.load(f))
+with open("examples/affinity/conditional_generator.json") as f:
+    params_p.update(json.load(f))
 
 logger.info(f'Model with name {model_name} starts.')
 
@@ -112,7 +119,7 @@ generator.load(
 generator_smiles_language = SMILESLanguage.load(
     os.path.join(mol_model_path, 'selfies_language.pkl')
 )
-#generator._associate_language(generator_smiles_language)
+generator._associate_language(generator_smiles_language)
 
  # Restore protein model
 with open(os.path.join(protein_model_path, 'model_params.json')) as f:
@@ -147,7 +154,6 @@ cell_encoder.eval()
 #load predictors
 with open(os.path.join(ic50_model_path, 'model_params.json')) as f:
     paccmann_params = json.load(f)
-
 
 paccmann_predictor = MODEL_FACTORY_OMICS['mca'](paccmann_params)
 paccmann_predictor.load(
@@ -231,11 +237,11 @@ protein_encoder_rl.load(
 )
 protein_encoder_rl.eval()
 
-model_folder_name = site + '_' + model_name + '_combined'
+model_folder_name = 'test_c' #site + '_' + model_name + '_combined'
 learner_combined = ReinforceProteinOmics(
     generator_rl, protein_encoder_rl,cell_encoder_rl, \
     protein_predictor, paccmann_predictor, protein_df, omics_df, \
-    params, generator_smiles_language, model_folder_name, logger, remove_invalid
+    params, params_o, params_p, generator_smiles_language, model_folder_name, logger, remove_invalid 
 )
 
 gru_encoder_rl_o = StackGRUEncoder(mol_params)
@@ -260,11 +266,11 @@ cell_encoder_rl_o.load(
 )
 cell_encoder_rl_o.eval()
 
-model_folder_name = site + '_' + model_name + '_omics'
-# learner_omics = ReinforceOmic(
-#     generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
-#     generator_smiles_language, model_folder_name, logger, remove_invalid
-# )
+model_folder_name = 'test_o' #site + '_' + model_name + '_omics'
+learner_omics = ReinforceOmic(
+    generator_rl_o, cell_encoder_rl_o, paccmann_predictor, omics_df, params,
+    generator_smiles_language, model_folder_name, logger, remove_invalid
+)
 
 gru_encoder_rl_p = StackGRUEncoder(mol_params)
 gru_decoder_rl_p = StackGRUDecoder(mol_params)
@@ -288,11 +294,11 @@ protein_encoder_rl_p.load(
 )
 protein_encoder_rl_p.eval()
 
-model_folder_name = site + '_' + model_name + '_protein'
-# learner_protein = ReinforceProtein(
-#     generator_rl_p, protein_encoder_rl_p, protein_predictor, protein_df, params,
-#     generator_smiles_language, model_folder_name, logger, remove_invalid
-# )
+model_folder_name = 'test_p' #site + '_' + model_name + '_protein'
+learner_protein = ReinforceProtein(
+    generator_rl_p, protein_encoder_rl_p, protein_predictor, protein_df, params,
+    generator_smiles_language, model_folder_name, logger, remove_invalid
+)
 
 # Split the samples for conditional generation and initialize training
 train_omics, test_omics = omics_data_splitter(
@@ -482,21 +488,17 @@ for epoch in range(1, params['epochs'] + 1):
     for step in range(1, params['steps'] + 1):
 
         # Randomly sample a cell lines and proteins for training:
-        #cell_line = np.random.choice(train_omics, size = 20, replace=True)
-        #cell_line = [str(i) for i in cell_line]
         cell_line  = [i for i in omics_df['cell_line'] if i != test_cell_line]
         protein_name = np.random.choice(train_protein.index, size = 20, replace=False)
         protein_name = [str(i) for i in protein_name]
-        #cell_line = [np.random.choice(train_omics)]
         print(f'Current train cell_lines: {cell_line}')
         # Randomly sample a protein
-        #protein_name = [np.random.choice(train_protein.index)]
         print(f'Current train proteins: {protein_name}')
 
         # losses_p, rewards_p, smiles_steps_p, protein_steps_p, _ = train_and_save_steps(
         #     learner_protein, epoch, params['batch_size'], smiles_steps_p, rewards_p, losses_p, protein_steps=protein_steps_p, protein_name=protein_name)
-        # losses_o, rewards_o, smiles_steps_o, _, cell_steps_o = train_and_save_steps(
-        #     learner_omics, epoch, params['batch_size'], smiles_steps_o, rewards_o, losses_o, cells=cell_steps_o, cell_line=cell_line)
+        losses_o, rewards_o, smiles_steps_o, _, cell_steps_o = train_and_save_steps(
+            learner_omics, epoch, params['batch_size'], smiles_steps_o, rewards_o, losses_o, cells=cell_steps_o, cell_line=cell_line)
         losses, rewards, smiles_steps, protein_steps, cell_steps = train_and_save_steps(
             learner_combined, epoch, params['batch_size'], smiles_steps, rewards, losses, protein_steps=protein_steps, protein_name=protein_name, cells=cell_steps, cell_line=cell_line)
 
