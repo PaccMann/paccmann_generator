@@ -88,11 +88,11 @@ parser.add_argument(
     help='Sanitizing/removing the invalid smiles during training.'
 )
 parser.add_argument(
-    'cancer_genes', type=list, 
+    'cancer_genes',
     help='a list with genes to consider.'
 )
 parser.add_argument(
-    'cancer_cell_lines', type=list, 
+    'cancer_cell_lines',
     help='a list with cell lines to consider.'
 )
 parser.add_argument(
