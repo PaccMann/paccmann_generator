@@ -24,9 +24,5 @@
     "sider_weight": 0,
     "tox21_weight": 0,
     "aromaticity_weight":0,
-    "cancertype":"hepatoblastoma",
-    "tox21_path":"/mnt/c/ClinToxMulti",
-    "organdb_path":"/mnt/c/Organdb_github",
-    "clintox_path":"/mnt/c/ClinToxMulti",
-    "sider_path":"/mnt/c/Sider"
+    "cancertype":"hepatoblastoma"
 }
