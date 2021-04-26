@@ -259,7 +259,8 @@ def main(*, parser_namespace):
                 m.train_and_save_steps(params['batch_size'], epoch, protein_name=protein_name, cell_line=cell_line)
 
         # Save model
-        unbiased_predsP = unbiased_preds_df[protein_name].values.reshape(-1)[:params['batch_size']]
+        pt_name = [i for i in protein_name if i in unbiased_preds_df.columns]
+        unbiased_predsP = unbiased_preds_df[pt_name].values.reshape(-1)[:params['batch_size']]
         unbiased_predsO = unbiased_preds_df[cell_line].values.reshape(-1)[:params['batch_size']]
         for m in models:
             m.model.save(f'gen_{epoch}.pt', f'enc_{epoch}_protein.pt', f'enc_{epoch}_omics.pt')
@@ -269,7 +270,8 @@ def main(*, parser_namespace):
                 unbiased_predsO=unbiased_predsO, cell_line=cell_line)
         
         # Evaluate on a validation cell line and protein.
-        unbiased_predsP = unbiased_preds_df[eval_protein_names].values.reshape(-1)[:params['eval_batch_size']]
+        pt_name = [i for i in eval_protein_names if i in unbiased_preds_df.columns]
+        unbiased_predsP = unbiased_preds_df[pt_name].values.reshape(-1)[:params['eval_batch_size']]
         unbiased_predsO = unbiased_preds_df[eval_cell_lines].values.reshape(-1)[:params['eval_batch_size']]
         
         for m in models:
