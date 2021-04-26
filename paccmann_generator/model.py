@@ -291,7 +291,7 @@ class Model:
                 'IC50': self.gen_ic50
             }
             plot_and_compare(
-                unbiased_predsO, predsO, param['site'], cell_line, epoch, self.model.model_path,
+                unbiased_predsO, predsO, '', cell_line, epoch, self.model.model_path,
                 mode, param
             )
             plot_and_compare_proteins(
