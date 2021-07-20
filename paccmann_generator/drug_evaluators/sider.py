@@ -1,4 +1,3 @@
-#%%
 """SIDER evaluator."""
 from .drug_evaluator import DrugEvaluator
 import torch
@@ -45,7 +44,7 @@ class SIDER(DrugEvaluator):
 
         Arguments:
             smiles_tensor {torch.Tensor} -- Tensor of shape 2 x SMILES_tokens
-            
+
         Returns:
             float -- Averaged  predictions from the model
         """
@@ -55,4 +54,4 @@ class SIDER(DrugEvaluator):
         # To allow accessing the raw predictions from outside
         self.predictions = predictions[0, :]
 
-        return 1. - float(self.predictions.mean())
+        return 1.0 - float(self.predictions.mean())

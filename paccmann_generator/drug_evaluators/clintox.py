@@ -1,4 +1,3 @@
-#%%
 """ClinTox evaluator."""
 from .drug_evaluator import DrugEvaluator
 import torch
@@ -18,7 +17,7 @@ class ClinTox(DrugEvaluator):
 
         Arguments:
             model_path {string} -- Path to the pretrained model
-        
+
         Keyword Arguments:
             reward_type {string} -- From {'thresholded', 'raw'}. If 'raw' the
                 average of the raw predictions is used as reward.
@@ -34,7 +33,7 @@ class ClinTox(DrugEvaluator):
     def set_reward_fn(self, reward_type: str):
         self.reward_type = reward_type
         if reward_type == 'thresholded':
-            self.reward_fn = lambda x: (1. if x[0] > .5 and x[1] < .5 else 0.)
+            self.reward_fn = lambda x: (1.0 if x[0] > 0.5 and x[1] < 0.5 else 0.0)
         elif reward_type == 'raw':
             # Average probabilities
             self.reward_fn = lambda x: float((x[0] + 1 - x[1]) / 2)

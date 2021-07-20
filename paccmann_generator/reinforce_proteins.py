@@ -9,10 +9,8 @@ from .reinforce import Reinforce
 
 
 class ReinforceProtein(Reinforce):
-
     def __init__(
-        self, generator, encoder, predictor, protein_df, params, model_name,
-        logger
+        self, generator, encoder, predictor, protein_df, params, model_name, logger
     ):
         """
         Constructor for the Reinforcement object.
@@ -42,12 +40,10 @@ class ReinforceProtein(Reinforce):
         self.protein_df = protein_df
 
         self.pad_smiles_predictor = LeftPadding(
-            predictor.smiles_padding_length,
-            predictor.smiles_language.padding_index
+            predictor.smiles_padding_length, predictor.smiles_language.padding_index
         )
         self.pad_protein_predictor = LeftPadding(
-            predictor.protein_padding_length,
-            predictor.protein_language.padding_index
+            predictor.protein_padding_length, predictor.protein_language.padding_index
         )
 
         self.protein_to_tensor = ToTensor(self.device)
@@ -80,16 +76,14 @@ class ReinforceProtein(Reinforce):
             latent_z = torch.unsqueeze(
                 self.reparameterize(
                     protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
-                ), 0
+                    protein_logvar.repeat(batch_size, 1),
+                ),
+                0,
             )
         return latent_z
 
     def protein_to_numerical(
-        self,
-        protein,
-        encoder_uses_sequence=True,
-        predictor_uses_sequence=True
+        self, protein, encoder_uses_sequence=True, predictor_uses_sequence=True
     ):
         """
         Receives a name of a protein.
@@ -109,27 +103,29 @@ class ReinforceProtein(Reinforce):
             sequence_tensor_p = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.predictor.protein_language.
-                        sequence_to_token_indexes(protein_sequence)
+                        self.predictor.protein_language.sequence_to_token_indexes(
+                            protein_sequence
+                        )
                     )
-                ), 0
+                ),
+                0,
             )
         if encoder_uses_sequence:
             sequence_tensor_e = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.encoder.protein_language.
-                        sequence_to_token_indexes(protein_sequence)
+                        self.encoder.protein_language.sequence_to_token_indexes(
+                            protein_sequence
+                        )
                     )
-                ), 0
+                ),
+                0,
             )
         if (not encoder_uses_sequence) or (not predictor_uses_sequence):
             # Column names of DF
             locations = [str(x) for x in range(768)]
             protein_encoding = self.protein_df.loc[protein][locations]
-            encoding_tensor = torch.unsqueeze(
-                torch.Tensor(protein_encoding), 0
-            )
+            encoding_tensor = torch.unsqueeze(torch.Tensor(protein_encoding), 0)
         t1 = sequence_tensor_e if encoder_uses_sequence else encoding_tensor
         t2 = sequence_tensor_p if predictor_uses_sequence else encoding_tensor
         return t1, t2
@@ -141,7 +137,7 @@ class ReinforceProtein(Reinforce):
         protein=None,
         primed_drug=' ',
         return_latent=False,
-        remove_invalid=True
+        remove_invalid=True,
     ):
         """
         Generate some compounds and evaluate them with the predictor
@@ -164,15 +160,12 @@ class ReinforceProtein(Reinforce):
 
         if protein is None:
             # Generate a random molecule
-            latent_z = torch.randn(
-                1, batch_size, self.generator.decoder.latent_dim
-            )
+            latent_z = torch.randn(1, batch_size, self.generator.decoder.latent_dim)
         else:
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False
-                )
-            )
+            (
+                protein_encoder_tensor,
+                protein_predictor_tensor,
+            ) = self.protein_to_numerical(protein, encoder_uses_sequence=False)
             protein_mu, protein_logvar = self.encoder(protein_encoder_tensor)
 
             # TODO: I need to make sure that I only sample around the encoding
@@ -180,8 +173,9 @@ class ReinforceProtein(Reinforce):
             latent_z = torch.unsqueeze(
                 self.reparameterize(
                     protein_mu.repeat(batch_size, 1),
-                    protein_logvar.repeat(batch_size, 1)
-                ), 0
+                    protein_logvar.repeat(batch_size, 1),
+                ),
+                0,
             )
 
         # Generate drugs
@@ -196,7 +190,7 @@ class ReinforceProtein(Reinforce):
             smiles_t, protein_predictor_tensor.repeat(len(valid_smiles), 1)
         )
         pred = np.squeeze(pred.detach().numpy())
-        #self.plot_hist(log_preds, cell_line, epoch, batch_size)
+        # self.plot_hist(log_preds, cell_line, epoch, batch_size)
 
         if return_latent:
             return valid_smiles, pred, latent_z
@@ -204,33 +198,30 @@ class ReinforceProtein(Reinforce):
             return valid_smiles, pred
 
     def update_reward_fn(self, params):
-        """ Set the reward function
+        """Set the reward function
         Arguments:
             params (dict): Hyperparameter for PaccMann reward function
         """
         super().update_reward_fn(params)
-        self.affinity_weight = params.get('affinity_weight', 1.)
+        self.affinity_weight = params.get('affinity_weight', 1.0)
 
         def tox_f(s):
             x = 0
-            if self.tox21_weight > 0.:
+            if self.tox21_weight > 0.0:
                 x += self.tox21_weight * self.tox21(s)
-            if self.sider_weight > 0.:
+            if self.sider_weight > 0.0:
                 x += self.sider_weight * self.sider(s)
-            if self.clintox_weight > 0.:
+            if self.clintox_weight > 0.0:
                 x += self.clintox_weight * self.clintox(s)
-            if self.organdb_weight > 0.:
+            if self.organdb_weight > 0.0:
                 x += self.organdb_weight * self.organdb(s)
             return x
 
         # This is the joint reward function. Each score is normalized to be
         # inside the range [0, 1].
-        self.reward_fn = (
-            lambda smiles, protein: (
-                self.affinity_weight * self.get_reward_affinity(
-                    smiles, protein
-                ) + np.array([tox_f(s) for s in smiles])
-            )
+        self.reward_fn = lambda smiles, protein: (
+            self.affinity_weight * self.get_reward_affinity(smiles, protein)
+            + np.array([tox_f(s) for s in smiles])
         )
 
     def get_reward(self, valid_smiles, protein):
@@ -257,9 +248,7 @@ class ReinforceProtein(Reinforce):
             np.array: computed reward (fixed to 1/(1+exp(x))).
         """
         # Build up SMILES tensor and GEP tensor
-        smiles_tensor = self.smiles_to_numerical(
-            valid_smiles, target='predictor'
-        )
+        smiles_tensor = self.smiles_to_numerical(valid_smiles, target='predictor')
 
         # If all SMILES are invalid, no reward is given
         if len(smiles_tensor) == 0:
@@ -313,9 +302,7 @@ class ReinforceProtein(Reinforce):
         if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
             lrps = 2
         hidden = self.generator.decoder.latent_to_hidden(
-            latent_z.repeat(
-                self.generator.decoder.n_layers, 1, lrps
-            )[:, valid_idx, :]
+            latent_z.repeat(self.generator.decoder.n_layers, 1, lrps)[:, valid_idx, :]
         )  # yapf: disable
         stack = self.generator.decoder.init_stack
 
@@ -329,17 +316,16 @@ class ReinforceProtein(Reinforce):
 
             log_probs = F.log_softmax(output, dim=1)
             target_char = torch.unsqueeze(padded_nums[p + 1], 1)
-            rl_loss -= torch.mean(
-                log_probs.gather(1, target_char) * reward_tensor
-            )
+            rl_loss -= torch.mean(log_probs.gather(1, target_char) * reward_tensor)
             # discounted_rewards = discounted_rewards * self.gamma
         summed_reward = torch.mean(torch.Tensor(rewards))
         rl_loss.backward()
 
         if self.grad_clipping is not None:
             torch.nn.utils.clip_grad_norm_(
-                list(self.generator.decoder.parameters()) +
-                list(self.encoder.parameters()), self.grad_clipping
+                list(self.generator.decoder.parameters())
+                + list(self.encoder.parameters()),
+                self.grad_clipping,
             )
         self.optimizer.step()
         return summed_reward, rl_loss.item()

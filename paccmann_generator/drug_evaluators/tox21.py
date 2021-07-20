@@ -1,4 +1,3 @@
-#%%
 """Tox21 evaluator."""
 from .drug_evaluator import DrugEvaluator
 import torch
@@ -31,10 +30,10 @@ class Tox21(DrugEvaluator):
         self.reward_type = reward_type
         if reward_type == 'thresholded':
             # If any assay was positive, no reward is given
-            self.reward_fn = lambda x: 0. if any(x > 0.5) else 1.
+            self.reward_fn = lambda x: 0.0 if any(x > 0.5) else 1.0
         elif reward_type == 'raw':
             # Average probabilities and invert to get reward
-            self.reward_fn = lambda x: 1. - float(x.mean())
+            self.reward_fn = lambda x: 1.0 - float(x.mean())
         else:
             raise ValueError(f'Unknown reward_type given: {reward_type}')
 

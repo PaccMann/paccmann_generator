@@ -64,7 +64,7 @@ def get_file(
     cache_subdir='cache',
     extract=False,
     archive_format='auto',
-    cache_dir=None
+    cache_dir=None,
 ):
     """
     Downloads a file from a URL if it not already in the cache.
