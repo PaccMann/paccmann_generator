@@ -13,11 +13,17 @@ from pytoda.transforms import LeftPadding, ToTensor
 
 
 class ReinforceMultiModalSets(Reinforce):
-
     def __init__(
-        self, generator: nn.Module, encoder: nn.Module, affinity_predictor: nn.Module,
-        efficacy_predictor: nn.Module, protein_df: pd.DataFrame, gep_df: pd.DataFrame,
-        params: dict, model_name: str, logger
+        self,
+        generator: nn.Module,
+        encoder: nn.Module,
+        affinity_predictor: nn.Module,
+        efficacy_predictor: nn.Module,
+        protein_df: pd.DataFrame,
+        gep_df: pd.DataFrame,
+        params: dict,
+        model_name: str,
+        logger,
     ):
         """
         Constructor for the Reinforcement object.
@@ -58,16 +64,16 @@ class ReinforceMultiModalSets(Reinforce):
 
         self.pad_efficacy_smiles_predictor = LeftPadding(
             params['predictor_smiles_length'],
-            efficacy_predictor.smiles_language.padding_index
+            efficacy_predictor.smiles_language.padding_index,
         )
         self.pad_affinity_smiles_predictor = LeftPadding(
             affinity_predictor.smiles_padding_length,
-            affinity_predictor.smiles_language.padding_index
+            affinity_predictor.smiles_language.padding_index,
         )
 
         self.pad_protein_predictor = LeftPadding(
             affinity_predictor.protein_padding_length,
-            affinity_predictor.protein_language.padding_index
+            affinity_predictor.protein_language.padding_index,
         )
 
         self.protein_to_tensor = ToTensor(self.device)
@@ -100,7 +106,7 @@ class ReinforceMultiModalSets(Reinforce):
 
         self.qed = QED()
 
-        if self.tox21_weight > 0.:
+        if self.tox21_weight > 0.0:
             self.tox21 = Tox21(
                 params.get('tox21_path', os.path.join('..', 'data', 'models', 'Tox21'))
             )
@@ -133,10 +139,11 @@ class ReinforceMultiModalSets(Reinforce):
             protein_encoder_tensor = torch.randn(1, self.encoder.latent_size)
             protein_predictor_tensor = None
         else:
-            protein_encoder_tensor, protein_predictor_tensor = (
-                self.protein_to_numerical(
-                    protein, encoder_uses_sequence=False, predictor_uses_sequence=True
-                )
+            (
+                protein_encoder_tensor,
+                protein_predictor_tensor,
+            ) = self.protein_to_numerical(
+                protein, encoder_uses_sequence=False, predictor_uses_sequence=True
             )
 
         locations = ['latent_' + str(x) for x in range(128)]
@@ -149,8 +156,7 @@ class ReinforceMultiModalSets(Reinforce):
             )
 
         combined_set = torch.stack(
-            [gep_t.repeat(batch_size, 1),
-             protein_encoder_tensor.repeat(batch_size, 1)]
+            [gep_t.repeat(batch_size, 1), protein_encoder_tensor.repeat(batch_size, 1)]
         ).permute(1, 0, 2)
         if shuffle:
             combined_set = combined_set[:, torch.randperm(2), :]
@@ -161,7 +167,7 @@ class ReinforceMultiModalSets(Reinforce):
         self,
         protein: str,
         encoder_uses_sequence: bool = True,
-        predictor_uses_sequence: bool = True
+        predictor_uses_sequence: bool = True,
     ) -> Tuple:
         """
         Receives a name of a protein.
@@ -185,10 +191,12 @@ class ReinforceMultiModalSets(Reinforce):
             sequence_tensor = torch.unsqueeze(
                 self.protein_to_tensor(
                     self.pad_protein_predictor(
-                        self.affinity_predictor.protein_language.
-                        sequence_to_token_indexes(protein_sequence)
+                        self.affinity_predictor.protein_language.sequence_to_token_indexes(
+                            protein_sequence
+                        )
                     )
-                ), 0
+                ),
+                0,
             )
         if (not encoder_uses_sequence) or (not predictor_uses_sequence):
             # Column names of DF
@@ -206,7 +214,7 @@ class ReinforceMultiModalSets(Reinforce):
         protein: str = None,
         cell_line: str = None,
         primed_drug: str = ' ',
-        return_latent: bool = False
+        return_latent: bool = False,
     ) -> Tuple:
         """
         Generate some compounds and evaluate them with the predictor
@@ -248,8 +256,9 @@ class ReinforceMultiModalSets(Reinforce):
         locations = ['gene_expression_' + str(x) for x in range(2128)]
 
         gep = torch.Tensor(
-            self.gep_df.loc[self.gep_df['cell_line'] == cell_line  # yapf: disable
-                            ][locations].values
+            self.gep_df.loc[self.gep_df['cell_line'] == cell_line][  # yapf: disable
+                locations
+            ].values
         )
 
         pred_p, pred_dict_p = self.affinity_predictor(
@@ -268,33 +277,38 @@ class ReinforceMultiModalSets(Reinforce):
             return valid_smiles, pred_p, log_preds, valid_idx
 
     def update_reward_fn(self, params: dict):
-        """ Set the reward function
+        """Set the reward function
         Arguments:
             params (dict): Hyperparameter for PaccMann reward function
         """
 
-        self.qed_weight = params.get('qed_weight', 0.)
+        self.qed_weight = params.get('qed_weight', 0.0)
 
-        self.tox21_weight = params.get('tox21_weight', .5)
+        self.tox21_weight = params.get('tox21_weight', 0.5)
 
-        self.paccmann_weight = params.get('paccmann_weight', 1.)
-        self.affinity_weight = params.get('affinity_weight', 1.)
+        self.paccmann_weight = params.get('paccmann_weight', 1.0)
+        self.affinity_weight = params.get('affinity_weight', 1.0)
 
         self.weight_tot = (
-            self.paccmann_weight + self.affinity_weight + self.tox21_weight +
-            self.qed_weight
+            self.paccmann_weight
+            + self.affinity_weight
+            + self.tox21_weight
+            + self.qed_weight
         )
 
-        self.reward_fn = (
-            lambda smiles, protein, cell: (
-                self.affinity_weight / self.weight_tot * self.
-                get_reward_affinity(smiles, protein) + self.paccmann_weight / self.
-                weight_tot * self.get_reward_paccmann(smiles, cell) + np.array(
-                    [
-                        self.qed_weight / self.weight_tot * self.qed(s) + self.
-                        tox21_weight / self.weight_tot * self.tox21(s) for s in smiles
-                    ]
-                )
+        self.reward_fn = lambda smiles, protein, cell: (
+            self.affinity_weight
+            / self.weight_tot
+            * self.get_reward_affinity(smiles, protein)
+            + self.paccmann_weight
+            / self.weight_tot
+            * self.get_reward_paccmann(smiles, cell)
+            + np.array(
+                [
+                    self.qed_weight / self.weight_tot * self.qed(s)
+                    + self.tox21_weight / self.weight_tot * self.tox21(s)
+                    for s in smiles
+                ]
             )
         )
 
@@ -314,12 +328,12 @@ class ReinforceMultiModalSets(Reinforce):
     def smiles_to_numerical(self, smiles_list: List, target: str) -> torch.Tensor:
         """Receives a list of SMILES and converts it to a numerical torch Tensor
             according to smiles_language.
-        
+
         Args:
             smiles_list (List): List of SMILES.
             target (str): One of efficacy or affinity to determine which predictor to
                 use.
-        
+
         Returns:
             torch.Tensor: Tensor of SMILES.
         """
@@ -332,22 +346,28 @@ class ReinforceMultiModalSets(Reinforce):
                 torch.unsqueeze(
                     self.smiles_to_tensor(
                         self.pad_efficacy_smiles_predictor(
-                            self.efficacy_predictor.smiles_language.
-                            smiles_to_token_indexes(smiles)
+                            self.efficacy_predictor.smiles_language.smiles_to_token_indexes(
+                                smiles
+                            )
                         )
-                    ), 0
-                ) for smiles in smiles_list
+                    ),
+                    0,
+                )
+                for smiles in smiles_list
             ]
         elif target == 'affinity':
             smiles_num = [
                 torch.unsqueeze(
                     self.smiles_to_tensor(
                         self.pad_affinity_smiles_predictor(
-                            self.affinity_predictor.smiles_language.
-                            smiles_to_token_indexes(smiles)
+                            self.affinity_predictor.smiles_language.smiles_to_token_indexes(
+                                smiles
+                            )
                         )
-                    ), 0
-                ) for smiles in smiles_list
+                    ),
+                    0,
+                )
+                for smiles in smiles_list
             ]
 
         if len(smiles_num) == 0:
@@ -361,7 +381,7 @@ class ReinforceMultiModalSets(Reinforce):
 
     def get_reward_affinity(self, valid_smiles: List, protein: str) -> np.array:
         """Get the reward from affinity predictor.
-        
+
         Args:
             valid_smiles (List): A list of valid SMILES strings.
             protein (str): Name of target protein
@@ -387,7 +407,7 @@ class ReinforceMultiModalSets(Reinforce):
 
     def get_reward_paccmann(self, valid_smiles: List, cell_line: str) -> np.array:
         """Get the reward from PaccMann.
-        
+
         Args:
             valid_smiles (List): A list of valid SMILES strings.
             cell_line (str): Name of the cell line.
@@ -403,8 +423,9 @@ class ReinforceMultiModalSets(Reinforce):
         locations = ['gene_expression_' + str(x) for x in range(2128)]
 
         gep_t = torch.Tensor(
-            self.gep_df.loc[self.gep_df['cell_line'] == cell_line  # yapf: disable
-                            ][locations].values
+            self.gep_df.loc[self.gep_df['cell_line'] == cell_line][  # yapf: disable
+                locations
+            ].values
         )
 
         pred, pred_dict = self.efficacy_predictor(
@@ -418,7 +439,7 @@ class ReinforceMultiModalSets(Reinforce):
         self, cell_line: str, protein: str, epoch: int, batch_size: int = 10
     ) -> Tuple:
         """Implementation of the policy gradient algorithm.
-        
+
         Args:
             protein (str): Name of protein to generate drugs.
             cell_line (str): Name of cell line to generate drugs.
@@ -458,9 +479,7 @@ class ReinforceMultiModalSets(Reinforce):
         if self.generator.decoder.latent_dim == 2 * self.encoder.latent_size:
             lrps = 2
         hidden = self.generator.decoder.latent_to_hidden(
-            latent_z.repeat(
-                self.generator.decoder.n_layers, 1, lrps
-            )[:, valid_idx, :]
+            latent_z.repeat(self.generator.decoder.n_layers, 1, lrps)[:, valid_idx, :]
         )  # yapf: disable
         stack = self.generator.decoder.init_stack
 

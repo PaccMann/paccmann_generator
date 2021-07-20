@@ -19,13 +19,13 @@ def filter_generated_drugs(
         'QED': [0.3, 1],
         'ESOL': [-10, -2],
         'MolecularWeight': [0, 1000],
-        'Tox21': [0,0.4999],
-        'OrganDB': [0,0.4999]
+        'Tox21': [0, 0.4999],
+        'OrganDB': [0, 0.4999],
     },
     overwrite_csv=False,
     csv_save=True,
     smi_save=False,
-    returning=False
+    returning=False,
 ):
     """
     Function to filter a list of generated drugs according to the specified
@@ -85,9 +85,10 @@ def filter_generated_drugs(
     data['Tox21'] = molecules.apply(tox21)
     data['OrganDB'] = molecules.apply(organdb)
     data['ID'] = data.apply(
-        lambda row: hashlib.
-        md5(f'{row["cell_line"]}-{row["SMILES"]}'.encode('utf-8')).hexdigest(),
-        axis=1
+        lambda row: hashlib.md5(
+            f'{row["cell_line"]}-{row["SMILES"]}'.encode('utf-8')
+        ).hexdigest(),
+        axis=1,
     )
 
     if not all([k in data.columns for k in filters.keys()]):
@@ -99,8 +100,7 @@ def filter_generated_drugs(
     #  Filter molecules
     best = data
     for key in filters.keys():
-        best = best[(best[key] > filters[key][0])
-                    & (best[key] < filters[key][1])]
+        best = best[(best[key] > filters[key][0]) & (best[key] < filters[key][1])]
 
     # Saving options
     if overwrite_csv:
