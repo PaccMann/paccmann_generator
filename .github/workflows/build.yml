@@ -39,126 +39,13 @@ jobs:
       run: |
         python3 -c "import paccmann_generator"
         pytest -s --cov=./
-  # Testing creation of conda env and execution of scripts
-  conda-ic50:
-    name: conda paccmann^rl ic50 (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            pip_cache_path: ~/.cache/pip
-            experimental: false
-          # Omitting tests on windows/macOS for brevity.
-    defaults:
-      run:
-        shell: bash -l {0}  # For conda
-    env:
-      # Increase this value to reset cache if conda.yml and requirements.txt
-      # have not changed
-      CACHE_NUMBER: 0
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Cache conda
-        uses: actions/cache@v2
-        with:
-          path: ~/conda_pkgs_dir  # from: conda-incubator/setup-miniconda@v2
-          key: ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{
-            hashFiles('conda.yml') }}
-
-      - name: Cache pip
-        uses: actions/cache@v2
-        with:
-          path: ${{ matrix.pip_cache_path }}
-          key: ${{ runner.os }}-pip--${{ env.CACHE_NUMBER }}-${{
-            hashFiles('requirements.txt') }}
-
-      - name: Conda environment setup
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: paccmann_generator
-          environment-file: examples/IC50/conda.yml
-          auto-activate-base: false
-          use-only-tar-bz2: true  # This needs to be set for proper caching
-          auto-update-conda: true  # Required for windows for `use-only-tar-bz2`
-
-      - name: Install paccmann_generator
-        run: |
-          git checkout 0.0.1
-          pip -V
-          pip install -e .
-          pip uninstall numpy
-          pip install numpy
-      - name: Test scripts
-        run: |
-          python3 examples/train_paccmann_rl.py -h
-
-  conda-affinity:
-    name: conda paccmann^rl affinity (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            pip_cache_path: ~/.cache/pip
-            experimental: false
-          # Omitting tests on windows/macOS for brevity.
-    defaults:
-      run:
-        shell: bash -l {0}  # For conda
-    env:
-      # Increase this value to reset cache if conda.yml and requirements.txt
-      # have not changed
-      CACHE_NUMBER: 0
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Cache conda
-        uses: actions/cache@v2
-        with:
-          path: ~/conda_pkgs_dir  # from: conda-incubator/setup-miniconda@v2
-          key: ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{
-            hashFiles('conda.yml') }}
-
-      - name: Cache pip
-        uses: actions/cache@v2
-        with:
-          path: ${{ matrix.pip_cache_path }}
-          key: ${{ runner.os }}-pip--${{ env.CACHE_NUMBER }}-${{
-            hashFiles('requirements.txt') }}
-
-      - name: Conda environment setup
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: paccmann_generator
-          environment-file: examples/affinity/conda.yml
-          auto-activate-base: false
-          use-only-tar-bz2: true  # This needs to be set for proper caching
-          auto-update-conda: true  # Required for windows for `use-only-tar-bz2`
-
-      - name: Install paccmann_generator
-        run: |
-          pip -V
-          pip install -e .
-          pip uninstall numpy
-          pip install numpy
-      - name: Test scripts
-        run: |
-          python3 examples/affinity/train_conditional_generator.py -h
-      - name: Send Slack notification
-        uses: 8398a7/action-slack@v2
-        if: always()
-        with:
-          status: ${{ job.status }}
-          text: "CI Build ${{ matrix.os }}"
-          author_name: ${{ github.actor }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_HOOK_URL }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Send Slack notification
+      uses: 8398a7/action-slack@v2
+      if: always()
+      with:
+        status: ${{ job.status }}
+        text: "CI Build ${{ matrix.os }}"
+        author_name: ${{ github.actor }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_HOOK_URL }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
