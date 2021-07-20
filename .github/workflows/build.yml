@@ -89,7 +89,10 @@ jobs:
       - name: Install paccmann_generator
         run: |
           git checkout 0.0.1
+          pip -V
           pip install -e .
+          pip uninstall numpy
+          pip install numpy
       - name: Test scripts
         run: |
           python3 examples/train_paccmann_rl.py -h
@@ -142,7 +145,10 @@ jobs:
 
       - name: Install paccmann_generator
         run: |
+          pip -V
           pip install -e .
+          pip uninstall numpy
+          pip install numpy
       - name: Test scripts
         run: |
           python3 examples/affinity/train_conditional_generator.py -h
