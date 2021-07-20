@@ -1,9 +1,0 @@
-name: paccmann_generator
-channels:
-  - https://conda.anaconda.org/rdkit
-dependencies:
-  - rdkit=2019.03.1
-  - python>=3.6,<3.8
-  - pip>=19.1,<20.3
-  - pip:
-    - --progress-bar off -r requirements.txt

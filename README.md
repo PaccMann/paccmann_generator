@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.com/PaccMann/paccmann_generator.svg?branch=master)](https://travis-ci.com/PaccMann/paccmann_generator)
 # paccmann_generator
 
-Multimodal generative models for PaccMann^RL.
+Multimodal generative models for PaccMann<sup>RL</sup>.
 
 `paccmann_generator` is a package for conditional molecular design, with examples of molecule generation against gene expression profiles or protein targets.
 For example, see our papers:
@@ -10,10 +10,6 @@ For example, see our papers:
 
 ![Graphical abstract](https://github.com/PaccMann/paccmann_generator/blob/master/assets/overview.png "Graphical abstract")
 
-
-## Requirements
-
-- `conda>=3.7`
 
 ## Installation
 
@@ -35,6 +31,7 @@ conda activate paccmann_generator
 Install in editable mode for development:
 
 ```sh
+git checkout 0.0.1  # Needed only for IC50 example (for affinity example skip this line)
 pip install -e .
 ```
 
