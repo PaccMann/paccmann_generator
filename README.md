@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.com/PaccMann/paccmann_generator.svg?branch=master)](https://travis-ci.com/PaccMann/paccmann_generator)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build status](https://github.com/PaccMann/paccmann_generator/actions/workflows/build.yml/badge.svg)](https://github.com/PaccMann/paccmann_generator/actions/workflows/build.yml)
 # paccmann_generator
 
 Multimodal generative models for PaccMann<sup>RL</sup>.
