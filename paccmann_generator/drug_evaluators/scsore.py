@@ -43,7 +43,7 @@ class SCScore(DrugEvaluator):
         self.score_scale = score_scale
         self.fp_len = fp_len
         self.fp_rad = fp_rad
-        self.sigmoid = lambda x: 1 / (1 + math.exp(x))
+        self.sigmoid = lambda x: 1 / (1 + math.exp(-x))
 
         self.scscore_path = get_file(self.scscore_filename, self.scscore_url)
         self.restore()
