@@ -32,7 +32,7 @@ setup(
     ),
     install_requires=[
         'numpy', 'pandas', 'matplotlib', 'seaborn',
-        'pytoda @ git+https://git@github.com/PaccMann/paccmann_datasets/@0.1.1',
+        'pytoda @ git+https://git@github.com/PaccMann/paccmann_datasets@0.1.1',
         'torch>=1.0.0', 'six>=1.12.0',
         'toxsmi @ git+https://git@github.com/PaccMann/toxsmi'
     ],
