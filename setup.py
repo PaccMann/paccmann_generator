@@ -34,7 +34,7 @@ setup(
         'numpy', 'pandas', 'matplotlib', 'seaborn',
         'pytoda @ git+https://git@github.com/PaccMann/paccmann_datasets@0.1.1',
         'torch>=1.0.0', 'six>=1.12.0',
-        'toxsmi @ git+https://git@github.com/PaccMann/toxsmi@0.0.3'
+        'toxsmi @ git+https://git@github.com/PaccMann/toxsmi@0.0.2.1'
     ],
     packages=find_packages('.'),
     zip_safe=False,
